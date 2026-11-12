@@ -1,0 +1,3 @@
+key|value|note
+opening_cash_as_of|5148063540|used fin_cash_daily_ms.csv 2026-06-30 closing as opening 2026-07-01
+covenant_threshold_krw|3000000000|covenant min

@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-11-12T14:47:05+09:00",
+  "manifest": {
+    "approval_flags.csv": "e8f387041807d63ae1b385ceb865f7d9d1548750813b296d75ba4a33ceaa554b",
+    "cash_projection.png": "a0974180c70d94301398ee2f7bcc51a0ff1740b16cf1db5ed9c0a3a7f09a26f5",
+    "full_cash_projection.csv": "06a049783fd1896bc004336a9fad84899bd46bed01afe5a3012a6523cf72d6ba",
+    "one_pager.pdf": "6d9bad7dd93d095c760c3e0597dc59123339bfb8565aad82ee1b40e87fb936c9",
+    "run_metadata.json": "78eea17086cb54d499588a1e0288b7492acca493e8a01ad2c47b22a7f95fc9dd",
+    "validation_report.json": "e55cd76bfaaeb0d8a7dd92bd263f66adea2bdbf68f4ec9e55bbcf35d45adb680"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "report": [
+    {
+      "file": "mkt_budget_plan_ms.csv",
+      "status": "ok",
+      "sha256": "c1696151998b68e3d8fa5e38e0d4f8fa91c0b4c45bffd743e4b59fd88cbf9df5"
+    },
+    {
+      "file": "fin_cash_daily_ms.csv",
+      "status": "ok",
+      "sha256": "6dd0d9f8ef3af047460ffaaea2d82a5eddd4a2fae74596507e7953809805129f"
+    },
+    {
+      "file": "fin_ar_aging_ms.csv",
+      "status": "ok",
+      "sha256": "242e9d3d8805d29903fb1d6c269ea841489e7ed3d1a9ad54732732ab6bae1437"
+    },
+    {
+      "file": "fin_ap_aging_ms.csv",
+      "status": "ok",
+      "sha256": "851c1d108caaad3c28a558a596f67459b520bc6828a00ca6e3bc3287017c4e11"
+    },
+    {
+      "file": "sc_purchase_orders_ms.csv",
+      "status": "ok",
+      "sha256": "2686b7e51395ff487b5cb37d7fe1a6f2f20c4ff77acea8164bee5e32918ebd44"
+    }
+  ]
+}

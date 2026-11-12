@@ -1,0 +1,2 @@
+event_id|entity_type|entity_id|event_type|actor|old_state|new_state|metadata
+E-PO-20260721|PO|SPO-BATCH-20260721|PO_OUTFLOW_SCHEDULED|system|SCHEDULED|PENDING|{"total_outflow":3749760000}
