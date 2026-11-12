@@ -114,37 +114,66 @@ jobs:
           if [ -z "$RUN_OUT" ]; then
             echo "ERROR: RUN_OUT is empty"; exit 1
           fi
-          # determine validation_report path
+          # determine validation_report path (prefer run-specific)
           VR="${RUN_OUT}/validation_report.json"
           if [ ! -f "$VR" ]; then
             VR="${{ github.workspace }}/masil-poc/results/validation_report.json"
           fi
           if [ ! -f "$VR" ]; then
-            echo "ERROR: validation_report.json not found"; exit 1
+            echo "ERROR: validation_report.json not found at expected locations: ${VR}" >&2
+            exit 1
           fi
-          # call external python validator (avoid here-doc)
+          # call external python validator (asserts_validate.py)
           python3 "${{ github.workspace }}/masil-poc/tools/asserts_validate.py" "$VR"
-          # 2) check that 2026-07-21 row exists and covenant_breach is True
-          if ! grep -q '^2026-07-21' "${RUN_OUT}/full_cash_projection.csv"; then
-            echo "ERROR: 2026-07-21 row not found in projection"; exit 1
+          VAL_EXIT=$?
+          if [ $VAL_EXIT -ne 0 ]; then
+            echo "ERROR: validation failed (exit code $VAL_EXIT). See ${VR}" >&2
+            exit $VAL_EXIT
           fi
-          awk -F'|' '$1=="2026-07-21" { if ($7 != "True") exit 1 } END { if (NR==0) exit 1 }' "${RUN_OUT}/full_cash_projection.csv" || { echo "ERROR: covenant_breach not True on 2026-07-21"; exit 1; }
+          # check that 2026-07-21 row exists and covenant_breach is True
+          PROJ="${RUN_OUT}/full_cash_projection.csv"
+          if [ ! -f "$PROJ" ]; then
+            echo "ERROR: projection file not found: ${PROJ}" >&2
+            exit 1
+          fi
+          if ! grep -q '^2026-07-21' "$PROJ"; then
+            echo "ERROR: 2026-07-21 row not found in projection ${PROJ}" >&2
+            exit 1
+          fi
+          awk -F'|' '$1=="2026-07-21" { if ($7 != "True") exit 1 } END { if (NR==0) exit 1 }' "$PROJ"
+          if [ $? -ne 0 ]; then
+            echo "ERROR: covenant_breach not True on 2026-07-21 in ${PROJ}" >&2
+            exit 1
+          fi
           echo "Domain asserts passed."
 
       - name: Package run artifacts (zip)
         id: package
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
+          if [ -z "$RUN_OUT" ]; then
+            echo "ERROR: RUN_OUT is empty" >&2
+            exit 1
+          fi
           RUN_ID=$(basename "${RUN_OUT}")
+          if [ -z "$RUN_ID" ]; then
+            echo "ERROR: RUN_ID could not be determined" >&2
+            exit 1
+          fi
           ZIPNAME="submission_${RUN_ID}.zip"
-          rm -f "${ZIPNAME}"
-          (cd "${RUN_OUT}" && zip -r "../${ZIPNAME}" .)
-          echo "Created ${ZIPNAME}"
+          OUT_DIR="$(dirname "${RUN_OUT}")"
+          rm -f "${OUT_DIR}/${ZIPNAME}"
+          (cd "${RUN_OUT}" && zip -r "${OUT_DIR}/${ZIPNAME}" .)
+          if [ $? -ne 0 ]; then
+            echo "ERROR: failed to create zip ${OUT_DIR}/${ZIPNAME}" >&2
+            exit 1
+          fi
+          echo "Created ${OUT_DIR}/${ZIPNAME}"
           echo "zipname=${ZIPNAME}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact (run-level package)
         uses: actions/upload-artifact@v4
         with:
           name: poc-results-${{ github.run_number }}
-          path: submission_*.zip
+          path: masil-poc/results/submission_*.zip
           retention-days: 30
