@@ -1,4 +1,4 @@
-name: PoC Demo CI (Linux, Enhanced)
+name: PoC Demo CI (masil-poc, Linux)
 
 on:
   workflow_dispatch:
@@ -12,113 +12,134 @@ jobs:
   run-poc:
     runs-on: ubuntu-latest
     env:
-      RUN_BASE_DIR: results
+      # repo root 기준으로 masil-poc 하위 구조 사용
+      BASE_DIR: ${{ github.workspace }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pandas matplotlib reportlab jq
 
-      - name: Prepare results dir
+      - name: Prepare top-level results dir
         run: |
-          mkdir -p results
+          mkdir -p "${{ github.workspace }}/masil-poc/results"
 
       - name: Validate input files (generate validation_report.json)
-        id: validate
+        id: validate_inputs
         run: |
-          python3 backend/validate_files.py --dir original --out results || { echo "Validation failed"; exit 4; }
-          echo "Validation passed or report generated."
+          # validate_files.py writes validation_report.json into masil-poc/results
+          python3 "${{ github.workspace }}/masil-poc/backend/validate_files.py" --dir "${{ github.workspace }}/masil-poc/original" --out "${{ github.workspace }}/masil-poc/results" || { echo "Validation script finished with non-zero (see report)"; exit 0; }
+          echo "Validation step completed (report generated if issues)."
 
       - name: Generate initial run metadata (start)
         id: meta_start
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
-          python3 backend/run_metadata.py --scenario "$SCENARIO" --assumptions inputs/assumptions.csv --out results
-          RUN_ID=$(python3 -c "import json,sys;print(json.load(open('results/run_metadata.json'))['run_id'])")
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" --scenario "$SCENARIO" --assumptions "${{ github.workspace }}/masil-poc/inputs/assumptions.csv" --out "${{ github.workspace }}/masil-poc/results"
+          # read run_id from newly created file
+          RUN_ID=$(python3 - <<PY
+import json, os
+meta = json.load(open(os.path.join(os.environ['GITHUB_WORKSPACE'],'masil-poc','results','run_metadata.json')))
+print(meta['run_id'])
+PY
+)
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
 
       - name: Run simulator and generators (into run-specific folder)
         id: run_sim
         run: |
+          SCENARIO="${{ github.event.inputs.scenario }}"
           RUN_ID="${{ steps.meta_start.outputs.run_id }}"
-          RUN_OUT="results/${RUN_ID}"
+          RUN_OUT="${{ github.workspace }}/masil-poc/results/${RUN_ID}"
           rm -rf "${RUN_OUT}"
           mkdir -p "${RUN_OUT}"
-          python3 backend/cash_simulator.py --scenario "${{ github.event.inputs.scenario }}" --out "${RUN_OUT}" --data original
-          python3 backend/generate_approvals.py --data original --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
-          python3 backend/generate_report.py --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
-          cp results/validation_report.json "${RUN_OUT}/" 2>/dev/null || true
-          cp results/run_metadata.json "${RUN_OUT}/"
+          echo "[RUN] Scenario: $SCENARIO, RUN_OUT: $RUN_OUT"
+          # run core scripts, writing outputs into RUN_OUT
+          python3 "${{ github.workspace }}/masil-poc/backend/cash_simulator.py" --scenario "$SCENARIO" --out "${RUN_OUT}" --data "${{ github.workspace }}/masil-poc/original"
+          python3 "${{ github.workspace }}/masil-poc/backend/generate_approvals.py" --data "${{ github.workspace }}/masil-poc/original" --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
+          python3 "${{ github.workspace }}/masil-poc/backend/generate_report.py" --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
+          # copy validation and initial metadata for audit trace
+          if [ -f "${{ github.workspace }}/masil-poc/results/validation_report.json" ]; then
+            cp "${{ github.workspace }}/masil-poc/results/validation_report.json" "${RUN_OUT}/" || true
+          fi
+          if [ -f "${{ github.workspace }}/masil-poc/results/run_metadata.json" ]; then
+            cp "${{ github.workspace }}/masil-poc/results/run_metadata.json" "${RUN_OUT}/" || true
+          fi
+          # export run_out for later steps
           echo "run_out=${RUN_OUT}" >> $GITHUB_OUTPUT
 
       - name: Mark run finished (update finished_at)
         id: meta_finish
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          python3 backend/run_metadata.py --update-finish --out "${RUN_OUT}"
-          echo "finished run metadata updated for ${RUN_OUT}"
+          if [ -z "$RUN_OUT" ]; then
+            echo "ERROR: RUN_OUT is empty"; exit 1
+          fi
+          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" --update-finish --out "${RUN_OUT}"
+          echo "Updated finished_at in ${RUN_OUT}/run_metadata.json"
 
       - name: Generate manifest (sha256) for run folder
         id: manifest
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          python3 tools/generate_manifest.py "${RUN_OUT}"
-          echo "manifest generated at ${RUN_OUT}/manifest.json"
+          if [ -z "$RUN_OUT" ]; then
+            echo "ERROR: RUN_OUT is empty"; exit 1
+          fi
+          # generate_manifest.py should be located at masil-poc/tools/generate_manifest.py
+          python3 "${{ github.workspace }}/masil-poc/tools/generate_manifest.py" "${RUN_OUT}"
+          echo "Generated manifest at ${RUN_OUT}/manifest.json"
 
       - name: Verify manifest integrity (compare hashes)
         id: verify_manifest
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          python3 - <<'PY'
-import json,hashlib,os,sys
-run_out = os.environ['RUN_OUT']
-mfile = os.path.join(run_out, 'manifest.json')
-if not os.path.exists(mfile):
-  print("manifest.json not found", mfile); sys.exit(2)
-m = json.load(open(mfile, encoding='utf-8'))
-bad=[]
-for rel, expected in m['manifest'].items():
-  p = os.path.join(run_out, rel)
-  if not os.path.exists(p):
-    bad.append((rel, 'MISSING'))
-    continue
-  h = hashlib.sha256(open(p,'rb').read()).hexdigest()
-  if h != expected:
-    bad.append((rel, expected, h))
-if bad:
-  print("MISMATCHES FOUND:", bad)
-  sys.exit(3)
-print("Manifest OK: all files match.")
-PY
+          if [ -z "$RUN_OUT" ]; then
+            echo "ERROR: RUN_OUT is empty"; exit 1
+          fi
+          # verify_manifest.py should be located at masil-poc/tools/verify_manifest.py
+          python3 "${{ github.workspace }}/masil-poc/tools/verify_manifest.py" "${RUN_OUT}"
+          echo "Manifest verification completed."
 
-      - name: Validation asserts (auto-fail if unexpected)
+      - name: Validation & domain asserts (auto-fail if unexpected)
         id: asserts
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          # validation_report: must have all status == ok
-          python3 - <<'PY'
+          if [ -z "$RUN_OUT" ]; then
+            echo "ERROR: RUN_OUT is empty"; exit 1
+          fi
+          # 1) validation_report must have all status == ok
+          VR="${RUN_OUT}/validation_report.json"
+          if [ ! -f "$VR" ]; then
+            # fallback to global result location
+            VR="${{ github.workspace }}/masil-poc/results/validation_report.json"
+          fi
+          if [ ! -f "$VR" ]; then
+            echo "ERROR: validation_report.json not found"; exit 1
+          fi
+          python3 - <<PY
 import json,sys
-r=json.load(open("results/validation_report.json"))
-for entry in r.get("report",[]):
-    if entry.get("status") != "ok":
+vr = "${VR}"
+r = json.load(open(vr, encoding='utf-8'))
+for entry in r.get('report', []):
+    if entry.get('status') != 'ok':
         print("validation error:", entry)
         sys.exit(1)
-print("validation ok")
+print("validation OK")
 PY
-          # check that 2026-07-21 row exists and covenant_breach is True
+          # 2) check that 2026-07-21 row exists and covenant_breach is True
           if ! grep -q '^2026-07-21' "${RUN_OUT}/full_cash_projection.csv"; then
-            echo "ERROR: 2026-07-21 row not found"; exit 6
+            echo "ERROR: 2026-07-21 row not found in projection"; exit 1
           fi
-          awk -F'|' '$1=="2026-07-21" { if ($7 != "True") exit 1 } END { if (NR==0) exit 1 }' "${RUN_OUT}/full_cash_projection.csv" || { echo "ERROR: covenant_breach not True on 2026-07-21"; exit 7; }
-          echo "Asserts passed."
+          awk -F'|' '$1=="2026-07-21" { if ($7 != "True") exit 1 } END { if (NR==0) exit 1 }' "${RUN_OUT}/full_cash_projection.csv" || { echo "ERROR: covenant_breach not True on 2026-07-21"; exit 1; }
+          echo "Domain asserts passed."
 
       - name: Package run artifacts (zip)
         id: package
@@ -128,6 +149,7 @@ PY
           ZIPNAME="submission_${RUN_ID}.zip"
           rm -f "${ZIPNAME}"
           (cd "${RUN_OUT}" && zip -r "../${ZIPNAME}" .)
+          echo "Created ${ZIPNAME}"
           echo "zipname=${ZIPNAME}" >> $GITHUB_OUTPUT
 
       - name: Upload artifact (run-level package)
