@@ -2,7 +2,7 @@
   "run_id": "db395f82-454b-45dc-adaa-e5e671a08091",
   "scenario": "base",
   "started_at": "2026-11-12T04:31:49.226746Z",
-  "finished_at": "2026-11-12T05:58:17Z",
+  "finished_at": "2026-11-12T06:50:05.658495Z",
   "assumptions": {
     "key": "value",
     "opening_cash_as_of": "5148063540",
