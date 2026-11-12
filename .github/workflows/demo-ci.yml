@@ -1,4 +1,4 @@
-name: PoC Demo CI (masil-poc, Linux)
+name: PoC Demo CI (masil-poc, Linux) - enhanced
 
 on:
   workflow_dispatch:
@@ -7,43 +7,48 @@ on:
         description: 'Scenario to run (base|conservative|optimistic)'
         required: false
         default: 'base'
+  push:
+    branches:
+      - main
+
+env:
+  PYTHON_VERSION: "3.10"
 
 jobs:
   run-poc:
     runs-on: ubuntu-latest
     env:
-      BASE_DIR: ${{ github.workspace }}
+      RUNS_DIR: ${{ github.workspace }}/masil-poc/results
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.10
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas matplotlib reportlab jq
+          pip install -r requirements.txt || true
+          pip install pytest
 
-      - name: Prepare masil-poc/results dir
+      - name: Prepare results dir
         run: |
           mkdir -p "${{ github.workspace }}/masil-poc/results"
 
       - name: Validate input files (generate validation_report.json)
         id: validate_inputs
         run: |
-          python3 "${{ github.workspace }}/masil-poc/backend/validate_files.py" \
-            --dir "${{ github.workspace }}/masil-poc/original" \
-            --out "${{ github.workspace }}/masil-poc/results" || true
-          echo "Validation step completed (report generated if issues)."
+          python3 masil-poc/backend/validate_files.py --dir masil-poc/original --out masil-poc/results || true
+          echo "validation_step=done" >> $GITHUB_OUTPUT
 
       - name: Generate initial run metadata (start)
         id: meta_start
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
-          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" --scenario "$SCENARIO" --assumptions "${{ github.workspace }}/masil-poc/inputs/assumptions.csv" --out "${{ github.workspace }}/masil-poc/results"
+          python3 masil-poc/backend/run_metadata.py --scenario "$SCENARIO" --assumptions masil-poc/inputs/assumptions.csv --out masil-poc/results
           RUN_ID=$(python3 -c "import json,os; print(json.load(open(os.path.join('masil-poc','results','run_metadata.json'))).get('run_id'))")
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "None" ]; then
             echo "Error: run_id not generated" >&2
@@ -57,127 +62,81 @@ jobs:
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
           RUN_ID="${{ steps.meta_start.outputs.run_id }}"
-          if [ -z "$RUN_ID" ]; then
-            echo "ERROR: RUN_ID is empty (meta_start did not produce run_id)"; exit 1
-          fi
           RUN_OUT="${{ github.workspace }}/masil-poc/results/${RUN_ID}"
           rm -rf "${RUN_OUT}"
           mkdir -p "${RUN_OUT}"
-          echo "Running scenario: $SCENARIO, RUN_OUT: $RUN_OUT"
-          python3 "${{ github.workspace }}/masil-poc/backend/cash_simulator.py" \
-            --scenario "$SCENARIO" --out "${RUN_OUT}" --data "${{ github.workspace }}/masil-poc/original"
-          python3 "${{ github.workspace }}/masil-poc/backend/generate_approvals.py" \
-            --data "${{ github.workspace }}/masil-poc/original" \
-            --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
-          python3 "${{ github.workspace }}/masil-poc/backend/generate_report.py" \
-            --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
-          # copy top-level validation_report/run_metadata for audit trace if present
-          cp "${{ github.workspace }}/masil-poc/results/validation_report.json" "${RUN_OUT}/" 2>/dev/null || true
-          cp "${{ github.workspace }}/masil-poc/results/run_metadata.json" "${RUN_OUT}/" 2>/dev/null || true
+          python3 masil-poc/backend/cash_simulator.py --scenario "$SCENARIO" --out "${RUN_OUT}" --data masil-poc/original
+          python3 masil-poc/backend/generate_approvals.py --data masil-poc/original --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
+          python3 masil-poc/backend/generate_report.py --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
+          cp masil-poc/results/run_metadata.json "${RUN_OUT}/" 2>/dev/null || true
           echo "run_out=${RUN_OUT}" >> $GITHUB_OUTPUT
 
       - name: Mark run finished (update finished_at)
         id: meta_finish
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty"; exit 1
-          fi
-          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" --update-finish --out "${RUN_OUT}"
-          echo "Updated finished_at in ${RUN_OUT}/run_metadata.json"
+          python3 masil-poc/backend/run_metadata.py --update-finish --out "${RUN_OUT}"
 
-      - name: Generate manifest (sha256) for run folder
+      - name: Generate manifest
         id: manifest
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty"; exit 1
-          fi
-          python3 "${{ github.workspace }}/masil-poc/tools/generate_manifest.py" "${RUN_OUT}"
-          echo "Generated manifest at ${RUN_OUT}/manifest.json"
+          python3 masil-poc/tools/generate_manifest.py "${RUN_OUT}"
 
-      - name: Verify manifest integrity (compare hashes)
+      - name: Verify manifest
         id: verify_manifest
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty"; exit 1
-          fi
-          python3 "${{ github.workspace }}/masil-poc/tools/verify_manifest.py" "${RUN_OUT}"
-          echo "Manifest verification completed."
+          python3 masil-poc/tools/verify_manifest.py "${RUN_OUT}"
 
-      - name: Validation & domain asserts (auto-fail if unexpected)
+      - name: Run validation/asserts (robust)
         id: asserts
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty" >&2
-            exit 1
-          fi
-
           VR="${RUN_OUT}/validation_report.json"
-          if [ ! -f "$VR" ]; then
-            VR="${{ github.workspace }}/masil-poc/results/validation_report.json"
-          fi
-          if [ ! -f "$VR" ]; then
-            echo "ERROR: validation_report.json not found" >&2
-            exit 1
-          fi
-
-          # validation
-          python3 "${{ github.workspace }}/masil-poc/tools/asserts_validate.py" "$VR"
-          if [ $? -ne 0 ]; then
-            echo "ERROR: validation failed" >&2
-            exit 1
-          fi
-
-          # robust projection check
+          if [ ! -f "$VR" ]; then VR="masil-poc/results/validation_report.json"; fi
+          python3 masil-poc/tools/asserts_validate.py "$VR"
           PROJ="${RUN_OUT}/full_cash_projection.csv"
-          if [ ! -f "$PROJ" ]; then
-            echo "ERROR: projection file not found: ${PROJ}" >&2
-            exit 1
-          fi
+          if [ ! -f "$PROJ" ]; then echo "ERROR: projection missing" >&2; exit 1; fi
           LINE=$(grep -n '^2026-07-21' "$PROJ" | head -n1 | sed 's/\r$//')
-          if [ -z "$LINE" ]; then
-            echo "ERROR: 2026-07-21 row not found in ${PROJ}" >&2
-            exit 1
-          fi
+          if [ -z "$LINE" ]; then echo "ERROR: 2026-07-21 missing" >&2; exit 1; fi
           LINE_CONTENT=$(echo "$LINE" | sed 's/^[0-9]*://')
           COL7=$(echo "$LINE_CONTENT" | awk -F'|' '{print $7}' | tr -d '\r' | sed 's/^[ \t]*//;s/[ \t]*$//' | tr '[:upper:]' '[:lower:]')
           echo "DEBUG: 2026-07-21 col7='$COL7'"
-          if [ "$COL7" != "true" ]; then
-            echo "ERROR: covenant_breach not true on 2026-07-21 (found: '$COL7')" >&2
-            exit 1
-          fi
+          if [ "$COL7" != "true" ]; then echo "ERROR: covenant_breach not true" >&2; exit 1; fi
           echo "Domain asserts passed."
 
-      - name: Package run artifacts (zip)
-        id: package
+      - name: Run unit and integration tests (pytest)
+        id: pytest
+        run: |
+          pytest -q || ( echo "pytest failed"; exit 1 )
+
+      - name: Run mock supplier demo (simulate external replies)
+        if: ${{ always() }}
+        id: mock_supplier_demo
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
-          if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty" >&2
-            exit 1
-          fi
-          RUN_ID=$(basename "${RUN_OUT}")
-          if [ -z "$RUN_ID" ]; then
-            echo "ERROR: RUN_ID could not be determined" >&2
-            exit 1
-          fi
-          ZIPNAME="submission_${RUN_ID}.zip"
-          OUT_DIR="$(dirname "${RUN_OUT}")"
-          rm -f "${OUT_DIR}/${ZIPNAME}"
-          (cd "${RUN_OUT}" && zip -r "${OUT_DIR}/${ZIPNAME}" .)
-          if [ $? -ne 0 ]; then
-            echo "ERROR: failed to create zip ${OUT_DIR}/${ZIPNAME}" >&2
-            exit 1
-          fi
-          echo "Created ${OUT_DIR}/${ZIPNAME}"
-          echo "zipname=${ZIPNAME}" >> $GITHUB_OUTPUT
+          # default: use mock supplier to simulate responses for PO items
+          python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0001 --amount 524160000 --scenario random || true
+          python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0003 --amount 436800000 --scenario partial || true
+          # after mock responses, optionally trigger action_handler to process events
+          python3 masil-poc/backend/action_handler.py --process-events --run-out "$RUN_OUT" || true
 
-      - name: Upload artifact (run-level package)
+      - name: Re-run projection if events changed
+        if: ${{ always() }}
+        id: rerun_after_events
+        run: |
+          RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
+          # if action_handler created po_status.json or similar, re-run simulator
+          if [ -f "${RUN_OUT}/po_status.json" ]; then
+            python3 masil-poc/backend/cash_simulator.py --out "${RUN_OUT}" --data masil-poc/original
+            python3 masil-poc/tools/generate_manifest.py "${RUN_OUT}"
+            python3 masil-poc/tools/verify_manifest.py "${RUN_OUT}"
+          fi
+
+      - name: Package and upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: poc-results-${{ github.run_number }}
-          path: masil-poc/results/submission_*.zip
+          name: poc-results-${{ steps.meta_start.outputs.run_id }}
+          path: masil-poc/results/${{ steps.meta_start.outputs.run_id }}
           retention-days: 30
