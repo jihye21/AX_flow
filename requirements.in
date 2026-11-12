@@ -1,0 +1,14 @@
+# requirements.in — 상위 의존만 적습니다
+pandas>=2.1,<2.2
+numpy>=1.26,<1.27
+matplotlib>=3.8,<3.9
+reportlab>=4.0
+python-dateutil>=2.8
+pyyaml>=6.0
+jsonschema>=4.0
+requests>=2.31
+pytest>=7.4
+pytest-cov>=4.0
+tqdm>=4.65
+# DB driver (optional, uncomment in production if needed)
+# psycopg2-binary>=2.9

@@ -1,0 +1,32 @@
+# core data and plotting
+pandas>=2.0,<3.0
+numpy>=1.25,<2.0
+matplotlib>=3.8,<4.0
+
+# report generation
+reportlab>=4.0,<5.0
+
+# CLI & utils
+python-dateutil>=2.8
+pyyaml>=6.0
+jsonschema>=4.0
+
+# HTTP / integrations
+requests>=2.31
+
+# testing & lint (CI)
+pytest>=7.4
+pytest-cov>=4.0
+
+# packaging/helpers
+tqdm>=4.65
+
+# optional (DB adapters, enable only in production or via extras)
+# postgresql driver for production deployments; comment out if not used in PoC
+psycopg2-binary>=2.9
+
+# Optional ML libs (only add if using AR recovery ML models)
+# lightgbm>=4.0
+# scikit-learn>=1.2
+
+# Pin or narrow versions in production for reproducibility
