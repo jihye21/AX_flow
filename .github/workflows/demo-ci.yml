@@ -43,14 +43,13 @@ jobs:
         id: meta_start
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
-          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" \
-            --scenario "$SCENARIO" \
-            --assumptions "${{ github.workspace }}/masil-poc/inputs/assumptions.csv" \
-            --out "${{ github.workspace }}/masil-poc/results"
+          python3 "${{ github.workspace }}/masil-poc/backend/run_metadata.py" --scenario "$SCENARIO" --assumptions "${{ github.workspace }}/masil-poc/inputs/assumptions.csv" --out "${{ github.workspace }}/masil-poc/results"
           RUN_ID=$(python3 -c "import json,os; print(json.load(open(os.path.join('masil-poc','results','run_metadata.json'))).get('run_id'))")
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "None" ]; then
-            echo "Error: run_id not generated"; exit 1
+            echo "Error: run_id not generated" >&2
+            exit 1
           fi
+          echo "DEBUG_RUN_ID=${RUN_ID}" >&2
           echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
 
       - name: Run simulator and generators (into run-specific folder)
@@ -112,37 +111,42 @@ jobs:
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
           if [ -z "$RUN_OUT" ]; then
-            echo "ERROR: RUN_OUT is empty"; exit 1
+            echo "ERROR: RUN_OUT is empty" >&2
+            exit 1
           fi
-          # determine validation_report path (prefer run-specific)
+
           VR="${RUN_OUT}/validation_report.json"
           if [ ! -f "$VR" ]; then
             VR="${{ github.workspace }}/masil-poc/results/validation_report.json"
           fi
           if [ ! -f "$VR" ]; then
-            echo "ERROR: validation_report.json not found at expected locations: ${VR}" >&2
+            echo "ERROR: validation_report.json not found" >&2
             exit 1
           fi
-          # call external python validator (asserts_validate.py)
+
+          # validation
           python3 "${{ github.workspace }}/masil-poc/tools/asserts_validate.py" "$VR"
-          VAL_EXIT=$?
-          if [ $VAL_EXIT -ne 0 ]; then
-            echo "ERROR: validation failed (exit code $VAL_EXIT). See ${VR}" >&2
-            exit $VAL_EXIT
+          if [ $? -ne 0 ]; then
+            echo "ERROR: validation failed" >&2
+            exit 1
           fi
-          # check that 2026-07-21 row exists and covenant_breach is True
+
+          # robust projection check
           PROJ="${RUN_OUT}/full_cash_projection.csv"
           if [ ! -f "$PROJ" ]; then
             echo "ERROR: projection file not found: ${PROJ}" >&2
             exit 1
           fi
-          if ! grep -q '^2026-07-21' "$PROJ"; then
-            echo "ERROR: 2026-07-21 row not found in projection ${PROJ}" >&2
+          LINE=$(grep -n '^2026-07-21' "$PROJ" | head -n1 | sed 's/\r$//')
+          if [ -z "$LINE" ]; then
+            echo "ERROR: 2026-07-21 row not found in ${PROJ}" >&2
             exit 1
           fi
-          awk -F'|' '$1=="2026-07-21" { if ($7 != "True") exit 1 } END { if (NR==0) exit 1 }' "$PROJ"
-          if [ $? -ne 0 ]; then
-            echo "ERROR: covenant_breach not True on 2026-07-21 in ${PROJ}" >&2
+          LINE_CONTENT=$(echo "$LINE" | sed 's/^[0-9]*://')
+          COL7=$(echo "$LINE_CONTENT" | awk -F'|' '{print $7}' | tr -d '\r' | sed 's/^[ \t]*//;s/[ \t]*$//' | tr '[:upper:]' '[:lower:]')
+          echo "DEBUG: 2026-07-21 col7='$COL7'"
+          if [ "$COL7" != "true" ]; then
+            echo "ERROR: covenant_breach not true on 2026-07-21 (found: '$COL7')" >&2
             exit 1
           fi
           echo "Domain asserts passed."
