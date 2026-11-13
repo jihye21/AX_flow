@@ -18,9 +18,11 @@ on:
 env:
   PYTHON_VERSION: "3.10"
   RUNS_DIR: ${{ github.workspace }}/masil-poc/results
+  FEATURE_REAL_EXECUTION: "false"  # CI에서는 기본적으로 실제 실행 비활성화
 
 jobs:
   run-poc:
+    name: Run PoC pipeline
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,6 +38,24 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install system dependencies for C extensions (apt)
+        run: |
+          # Ubuntu runner: pycairo / cairo / build deps
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            build-essential \
+            cmake \
+            python3-dev \
+            libffi-dev \
+            libssl-dev \
+            libxml2-dev \
+            libxslt1-dev
+          # Clean apt lists to reduce runner disk usage
+          sudo rm -rf /var/lib/apt/lists/*
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -46,8 +66,7 @@ jobs:
 
       - name: Install pinned dependencies
         run: |
-          python -m pip install --upgrade pip
-          # pip-tools optional, keep for local compile ability
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install pip-tools || true
           if [ -f requirements-lock.txt ]; then
             pip install -r requirements-lock.txt
@@ -88,7 +107,6 @@ jobs:
           RUN_OUT="${{ github.workspace }}/masil-poc/results/${RUN_ID}"
           rm -rf "${RUN_OUT}"
           mkdir -p "${RUN_OUT}"
-          # Run core steps (adjust script args as your repo expects)
           python3 masil-poc/backend/cash_simulator.py --scenario "$SCENARIO" --out "${RUN_OUT}" --data masil-poc/original
           python3 masil-poc/backend/generate_approvals.py --data masil-poc/original --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
           python3 masil-poc/backend/generate_report.py --proj "${RUN_OUT}/full_cash_projection.csv" --out "${RUN_OUT}"
@@ -122,7 +140,6 @@ jobs:
           python3 masil-poc/tools/asserts_validate.py "$VR"
           PROJ="${RUN_OUT}/full_cash_projection.csv"
           if [ ! -f "$PROJ" ]; then echo "ERROR: projection missing" >&2; exit 1; fi
-          # robust check for example date 2026-07-21 covenant flag
           LINE=$(grep -n '^2026-07-21' "$PROJ" | head -n1 | sed 's/\r$//')
           if [ -z "$LINE" ]; then echo "ERROR: 2026-07-21 missing" >&2; exit 1; fi
           LINE_CONTENT=$(echo "$LINE" | sed 's/^[0-9]*://')
@@ -142,7 +159,6 @@ jobs:
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
           python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0001 --amount 524160000 --scenario random || true
           python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0003 --amount 436800000 --scenario partial || true
-          # optional: process events
           python3 masil-poc/backend/action_handler.py --process-events --run-out "$RUN_OUT" || true
 
       - name: Re-run projection if events changed
