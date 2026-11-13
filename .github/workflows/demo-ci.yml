@@ -76,6 +76,10 @@ jobs:
             echo "No requirements file found, continuing..."
           fi
 
+      - name: Set PYTHONPATH for tests
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+
       - name: Prepare results dir
         run: |
           mkdir -p "${{ env.RUNS_DIR }}"
