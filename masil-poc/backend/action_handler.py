@@ -4,7 +4,8 @@ import json
 import uuid
 import subprocess
 from datetime import datetime
-from integrations import mock_supplier, supplier_adapter_template
+from tools import mock_supplier
+from integrations import supplier_adapter_template
 from utils import idempotency
 
 RUNS_DIR = os.environ.get("RUNS_DIR", "masil-poc/results")
