@@ -3,12 +3,13 @@
 # Usage:
 # python3 tools/run_simulation.py --demand runs/campaign_A_f70be0.csv --scenario base --out runs/run_xxx
 import argparse, csv, hashlib, json, os, re, subprocess, sys, datetime, shutil, tempfile
-from datetime import datetime as dt, timedelta
+from datetime import datetime as dt, timedelta, timezone
 
 # -------------------------
 # 유틸리티
 # -------------------------
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BASE_RUNS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "runs"))
 
 def file_hash(path):
     h = hashlib.sha256()
@@ -153,22 +154,35 @@ def validate_csv(path):
 # main simulation runner
 # -------------------------
 def run_simulation_main(demand, scenario, outdir, sim_cmd_template=None, data_dir_provided=None):
+    run_id = os.path.basename(outdir)
     ensure_dir(outdir)
     meta = {
+        "run_id": run_id,
         "demand_file": os.path.abspath(demand),
         "demand_hash": file_hash(demand),
         "scenario": scenario,
-        "started_at": dt.utcnow().isoformat()+"Z",
+        "started_at": dt.now(timezone.utc).isoformat(),
         "cwd": os.getcwd()
     }
-    # determine data dir: if data_dir_provided use it, else default ./data_file
-    if data_dir_provided:
-        DATA_DIR = data_dir_provided
-    else:
-        DATA_DIR = os.path.abspath("data_file")
-    meta['data_dir'] = DATA_DIR
+    # write early metadata
+    with open(os.path.join(outdir, "run_metadata.json"), "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=2, ensure_ascii=False)
 
-    # validation
+    # prepare scenario data dir and copy canonical files (immutable original)
+    scenario_data_dir = os.path.join(outdir, "scenario_data")
+    ensure_dir(scenario_data_dir)
+    canonical_data_dir = data_dir_provided or os.path.abspath("data_file")
+    for fname in os.listdir(canonical_data_dir):
+        if fname.endswith(".csv"):
+            shutil.copy2(os.path.join(canonical_data_dir, fname), os.path.join(scenario_data_dir, fname))
+    # Use scenario_data_dir consistently from here on
+    DATA_DIR = scenario_data_dir
+    meta['data_dir'] = DATA_DIR
+    # rewrite metadata after copy
+    with open(os.path.join(outdir, "run_metadata.json"), "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=2, ensure_ascii=False)
+
+    # validation using demand file
     problems = validate_csv(demand)
     if problems:
         meta['validation_errors'] = problems
@@ -176,7 +190,7 @@ def run_simulation_main(demand, scenario, outdir, sim_cmd_template=None, data_di
         print("VALIDATION FAILED", problems, file=sys.stderr)
         return 2
 
-    # apply scenario-specific pre-processing on PO files if needed
+    # pre-processing on copied scenario data
     applied_note = None
     if scenario == 'po_shift':
         ok, msg = apply_po_shift(DATA_DIR, shift_days=31)
@@ -184,21 +198,67 @@ def run_simulation_main(demand, scenario, outdir, sim_cmd_template=None, data_di
     elif scenario == 'po_split':
         ok, msg = apply_po_split(DATA_DIR)
         applied_note = msg
-    # apply origin hold extension (always run and include note)
+
     ok_hold, hold_msg = apply_origin_hold(DATA_DIR)
     if ok_hold and hold_msg:
         meta['origin_hold'] = json.loads(hold_msg)
     if applied_note:
         meta['applied_scenario_note'] = applied_note
 
-    # write metadata early
+    # write metadata again
+    write_text(os.path.join(outdir,"run_metadata.json"), json.dumps(meta, indent=2, ensure_ascii=False))
+    
+    try:
+        required = determine_required_approvers(outdir)  # outdir == run_dir
+        dec_path = decision_file_path(run_id)
+
+        if os.path.isfile(dec_path):
+            try:
+                with open(dec_path, 'r', encoding='utf-8') as fh:
+                    doc = json.load(fh)
+            except Exception:
+                doc = {"required_approvers": [], "approvals": [], "audit": []}
+
+            if doc.get('required_approvers') != required:
+                old = doc.get('required_approvers')
+                doc['required_approvers'] = required
+                doc.setdefault('audit', []).append({
+                    "actor": "system",
+                    "action": "auto_escalate",
+                    "detail": {"old": old, "new": required},
+                    "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                })
+                tmp_path = dec_path + ".tmp"
+                with open(tmp_path, 'w', encoding='utf-8') as tf:
+                    json.dump(doc, tf, indent=2, ensure_ascii=False)
+                    tf.flush()
+                    os.fsync(tf.fileno())
+                os.replace(tmp_path, dec_path)
+        else:
+            doc = {"required_approvers": required, "approvals": [], "audit": [{
+                "actor": "system",
+                "action": "init_required_approvers",
+                "detail": {"new": required},
+                "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            }]}
+            with open(dec_path, 'w', encoding='utf-8') as fh:
+                json.dump(doc, fh, indent=2, ensure_ascii=False)
+
+    except Exception as e:
+        # Do not break simulation pipeline; log warning
+        print(f"[WARN] auto_escalation sync failed for run {run_id}: {e}", file=sys.stderr)
+        
+    # compute bottlenecks (example call)
+    bottlenecks = compute_bottleneck_skus(DATA_DIR)
+    meta['bottleneck_skus'] = bottlenecks
     write_text(os.path.join(outdir,"run_metadata.json"), json.dumps(meta, indent=2, ensure_ascii=False))
 
-    # run the actual simulator (existing script expects --data <dir> and --out <dir>)
+    # run simulator
     sim_cmd = sim_cmd_template[:] if sim_cmd_template else ["python3", "masil-poc/backend/cash_simulator.py"]
-    sim_cmd += ["--data", DATA_DIR, "--out", outdir, "--scenario", "base" ]  # simulator internal scenario param left as 'base'
+    sim_cmd += ["--data", DATA_DIR, "--out", outdir, "--scenario", "base"]
     print("Running simulator:", " ".join(sim_cmd))
     p = subprocess.Popen(sim_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    
     logs = []
     for line in p.stdout:
         print(line, end="")
@@ -259,6 +319,45 @@ def run_simulation_main(demand, scenario, outdir, sim_cmd_template=None, data_di
     meta['finished_at'] = dt.utcnow().isoformat()+"Z"
     write_text(os.path.join(outdir,"run_metadata.json"), json.dumps(meta, indent=2, ensure_ascii=False))
     return 0 if rc == 0 and not missing else 4
+
+def compute_bottleneck_skus(data_dir, campaign_start=None, campaign_end=None):
+    # campaign_start/end are date strings YYYY-MM-DD or None; if None, use summary window or 90 days
+    po_path = os.path.join(data_dir, "sc_purchase_orders_ms.csv")
+    inv_path = os.path.join(data_dir, "sku_inventory_ms.csv")  # 예상 파일명
+    bottlenecks = []
+    # load inventory coverage
+    inv_cover = {}
+    if os.path.isfile(inv_path):
+        with open(inv_path,newline='') as fh:
+            rdr = csv.DictReader(fh, delimiter='|')
+            for r in rdr:
+                sku = r.get('sku_id') or r.get('sku') or r.get('SKU')
+                try:
+                    inv_cover[sku] = float(r.get('stock_cover_weeks', r.get('stock_cover', 0)) or 0)
+                except:
+                    inv_cover[sku] = 0.0
+    # parse POs and evaluate lead time vs campaign window
+    if os.path.isfile(po_path):
+        with open(po_path,newline='') as fh:
+            rdr = csv.DictReader(fh, delimiter='|')
+            for r in rdr:
+                sku = r.get('sku_id') or r.get('sku') or r.get('SKU')
+                try:
+                    lead_weeks = float(r.get('lead_time_weeks') or r.get('lead_time') or 0)
+                except:
+                    lead_weeks = 0
+                # if inventory_cover less than required to survive until lead arrives, mark bottleneck
+                cover_weeks = inv_cover.get(sku, 0.0)
+                if cover_weeks < lead_weeks:
+                    # optional: check if payment_due_date (or expected arrival) within campaign period, we mark
+                    bottlenecks.append({"sku":sku,"lead_weeks":lead_weeks,"cover_weeks":cover_weeks,"po_id":r.get('po_id')})
+    # dedupe
+    seen = {}
+    out = []
+    for b in bottlenecks:
+        if b['sku'] not in seen:
+            out.append(b); seen[b['sku']] = True
+    return out
 
 # -------------------------
 # CLI

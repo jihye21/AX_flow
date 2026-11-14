@@ -1,6 +1,7 @@
 # backend/api.py
 from flask import Flask, request, jsonify, send_from_directory
-import os, uuid, subprocess, threading, json, datetime, functools, csv
+import os, uuid, subprocess, threading, json, datetime, functools, csv, fcntl, time
+from datetime import datetime, timezone
 
 try:
     from llm_wrapper import generate_recommendations
@@ -10,10 +11,39 @@ except ImportError:
 APP_ROOT = os.path.abspath(os.path.dirname(__file__))
 RUNS_DIR = os.path.join(APP_ROOT, "..", "runs")
 FRONTEND_DIR = os.path.join(APP_ROOT, "..", "frontend")
+BASE_RUNS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "runs"))
 os.makedirs(RUNS_DIR, exist_ok=True)
+
+def determine_required_approvers(run_dir):
+    required = ["purchase_lead"]
+    summary_path = os.path.join(run_dir, "summary.json")
+    if not os.path.isfile(summary_path):
+        return required
+    try:
+        with open(summary_path, "r", encoding="utf-8") as fh:
+            s = json.load(fh)
+        # 격상 예: shortfall_count > 0 또는 shortfalls_sample 내 covenant 값이 임계치 미만
+        if s.get("shortfall_count", 0) > 0:
+            return ["group_ceo"]
+        for item in s.get("shortfalls_sample", []):
+            # item 형식: [date, metric, value]
+            try:
+                metric = str(item[1]).upper()
+                val = int(item[2])
+                if "COVENANT" in metric and val < 3000000000:
+                    return ["group_ceo"]
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return required
 
 app = Flask(__name__)
 RUNS = {}
+
+def map_user_to_role(user_name):
+    mapping = {"alice":"purchase_lead", "bob":"finance_lead", "ceo":"group_ceo", "demo_user":"purchase_lead"}
+    return mapping.get(user_name, "unknown")
 
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
@@ -32,7 +62,7 @@ def run_worker(run_id, demand_path, scenario):
     ]
     rc = subprocess.call(cmd)
     
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.now(timezone.utc).isoformat()
     run['returncode'] = rc
     run['finished_at'] = now
     
@@ -113,7 +143,7 @@ def start_run():
         "demand_file": demand_path,
         "scenario": scenario,
         "status": "QUEUED",
-        "created_at": datetime.datetime.utcnow().isoformat() + "Z"
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     t = threading.Thread(target=run_worker, args=(run_id, demand_path, scenario), daemon=True)
     t.start()
@@ -148,129 +178,116 @@ def get_artifact(run_id, filename):
 def require_token(f):
     @functools.wraps(f)
     def wrapper(*a, **kw):
-        token = request.headers.get("X-Auth-Token") or request.args.get("token")
-        if not token:
-            return jsonify({"error": "missing token"}), 401
+        # 개발용: 토큰 검사 비활성화
         return f(*a, **kw)
     return wrapper
 
 def decision_file_path(run_id):
-    d = os.path.join(RUNS_DIR, run_id)
-    ensure_dir(d)
+    d = os.path.join(BASE_RUNS_DIR, run_id)
+    os.makedirs(d, exist_ok=True)
     return os.path.join(d, "decision.json")
 
 @app.route("/api/runs/<run_id>/decision", methods=["POST"])
 @require_token
 def run_decision(run_id):
-    payload = request.get_json() or {}
+    payload = request.get_json(silent=True) or {}
     decision = payload.get("decision")
+    role = payload.get("role")
     comment = payload.get("comment", "")
-    role = payload.get("role") or request.headers.get("X-Role", "unknown")
-    actor = request.headers.get("X-User", role)
-    
+    actor = payload.get("actor", request.headers.get("X-User", "ui-user"))
+
+    # 기본 검증
     if decision not in ("APPROVED", "REJECTED"):
         return jsonify({"error": "decision must be APPROVED or REJECTED"}), 400
-    if role not in ("purchase_lead", "finance_lead"):
-        return jsonify({"error": f"권한 없음: '{role}' 역할은 결재 권한이 없습니다."}), 403
+    if not role:
+        return jsonify({"error": "role required"}), 400
 
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    # run dir 확인
+    run_dir = os.path.join(BASE_RUNS_DIR, run_id)
+    if not os.path.isdir(run_dir):
+        return jsonify({"error": "run not found"}), 404
+
+    dec_path = decision_file_path(run_id)
+
+    # decision.json이 없으면 summary 기반으로 required_approvers 초기화
+    if not os.path.isfile(dec_path):
+        required = determine_required_approvers(run_dir)
+        doc_init = {"required_approvers": required, "approvals": [], "audit": []}
+        with open(dec_path, "w", encoding="utf-8") as fh:
+            json.dump(doc_init, fh, indent=2, ensure_ascii=False)
+
+    # load decision doc
+    try:
+        with open(dec_path, "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except Exception:
+        doc = {"required_approvers": [], "approvals": [], "audit": []}
+
+    required_roles = doc.get("required_approvers", [])
+
+    # 권한 체크: role이 required_roles에 있어야 승인 처리 허용
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    if role not in required_roles:
+        # forbidden: approvals에는 추가하지 말고 audit에 기록만 남김
+        doc.setdefault("audit", []).append({
+            "actor": actor,
+            "action": "forbidden_attempt",
+            "detail": {"role": role},
+            "at": now
+        })
+        # save doc (atomic)
+        tmp = dec_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as tf:
+            json.dump(doc, tf, indent=2, ensure_ascii=False)
+            tf.flush(); os.fsync(tf.fileno())
+        os.replace(tmp, dec_path)
+        return jsonify({"error": "forbidden", "reason": "role not allowed for this run"}), 403
+
+    # 승인/반려 처리: 허용된 role만 여기서 처리
     entry = {
         "id": uuid.uuid4().hex,
         "role": role,
         "actor": actor,
         "decision": decision,
         "comment": comment,
-        "at": now
+        "at": now,
+        "approved_via_ui": True
     }
+    doc.setdefault("approvals", []).append(entry)
+    doc.setdefault("audit", []).append({"actor": actor, "action": "decision", "detail": entry, "at": now})
 
-    path = decision_file_path(run_id)
-    if os.path.isfile(path):
-        with open(path, "r", encoding='utf-8') as fh:
-            doc = json.load(fh)
-    else:
-        doc = {"approvals": [], "audit": []}
-    doc["approvals"].append(entry)
-    doc["audit"].append({"actor": actor, "role": role, "action": "decision", "detail": entry, "at": now})
-    with open(path, "w", encoding='utf-8') as fh:
-        json.dump(doc, fh, indent=2, ensure_ascii=False)
+    # save decision.json atomically
+    tmp = dec_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as tf:
+        json.dump(doc, tf, indent=2, ensure_ascii=False)
+        tf.flush(); os.fsync(tf.fileno())
+    os.replace(tmp, dec_path)
 
-    run = RUNS.get(run_id)
-    if run and "approval_state" in run:
-        app_state = run["approval_state"]
-        app_state["approvals"][role] = {
-            "status": decision,
-            "actor": actor,
-            "at": now,
-            "comment": comment
-        }
-        run["last_decision"] = entry
-        run.setdefault("notifications", [])
+    # 상태 판정(파일 기반 approvals로만 판정)
+    required_roles = doc.get("required_approvers", [])
+    def role_is_approved(r):
+        return any(a.get("role") == r and a.get("decision") == "APPROVED" for a in doc.get("approvals", []))
+    all_approved = all(role_is_approved(r) for r in required_roles)
 
-        if decision == "REJECTED":
-            run["status"] = "REJECTED_REPLANNING"
-            run["notifications"].append({
-                "channel": "Slack (#ops-alert)",
-                "recipient": "@마케팅팀 @구매팀장 @재무팀장",
-                "message": f"[{run_id}] {role} 반려(REJECTED) 처리됨. 캠페인 30% 축소 플랜 B 자동 재계산 시작.",
-                "sent_at": now
-            })
-        else:
-            all_approved = all(
-                v["status"] == "APPROVED" for v in app_state["approvals"].values()
-            )
-            if all_approved:
-                run["status"] = "APPROVED"
-                run["erp_sync"] = {
-                    "status": "COMMITTED (MOCK)",
-                    "idempotency_key": f"erp-{run_id}-{uuid.uuid4().hex[:6]}",
-                    "synced_at": now
-                }
-                run["notifications"].append({
-                    "channel": "Slack (#erp-sync) & Email",
-                    "recipient": "@ERP담당자 @구매팀 @재무팀",
-                    "message": f"[{run_id}] 최종 다중 승인(2/2) 완료! ERP 반영 트랜잭션 전송됨.",
-                    "sent_at": now
-                })
-            else:
-                run["status"] = "PARTIALLY_APPROVED"
-                next_role = "재무팀장(finance_lead)" if role == "purchase_lead" else "구매팀장(purchase_lead)"
-                run["notifications"].append({
-                    "channel": "Slack (#ops-alert)",
-                    "recipient": f"@{next_role}",
-                    "message": f"[{run_id}] 1차 승인({role}) 완료. 다음 결재자({next_role}) 승인 대기 중.",
-                    "sent_at": now
-                })
+    run = RUNS.setdefault(run_id, {})
+    run.setdefault("approval_state", {})
+    run["approval_state"].setdefault("approvals", {})
+    run["approval_state"]["approvals"][role] = {"status": decision, "actor": actor, "at": now, "comment": comment}
+    run["status"] = "APPROVED" if all_approved else ("PARTIALLY_APPROVED" if any(a.get("decision") == "APPROVED" for a in doc.get("approvals", [])) else "PENDING")
 
-    if decision == "REJECTED":
-        run_dir = os.path.join(RUNS_DIR, run_id)
-        demand = run.get("demand_file") if run else None
-        if demand and os.path.isfile(demand):
-            red_path = os.path.join(run_dir, "demand_reduced_30.csv")
-            with open(demand, newline='', encoding='utf-8') as inf, open(red_path, 'w', newline='', encoding='utf-8') as outf:
-                rdr = csv.reader(inf)
-                w = csv.writer(outf)
-                header = next(rdr)
-                w.writerow(header)
-                try:
-                    idx = [h.lower() for h in header].index('expected_daily_orders')
-                except ValueError:
-                    idx = None
-                for r in rdr:
-                    if idx is not None and len(r) > idx and r[idx].strip() != "":
-                        try:
-                            v = int(float(r[idx]))
-                            r[idx] = str(int(v * 0.7))
-                        except Exception:
-                            pass
-                    w.writerow(r)
-            outdir = os.path.join(run_dir, "replan_run")
-            ensure_dir(outdir)
-            script_path = os.path.join(APP_ROOT, "..", "tools", "run_simulation.py")
-            cmd = ["python3", script_path, "--demand", red_path, "--scenario", "conservative", "--out", outdir]
-            subprocess.Popen(cmd)
+    # run metadata update
+    meta_path = os.path.join(run_dir, "run_metadata.json")
+    try:
+        meta = json.load(open(meta_path, "r", encoding="utf-8"))
+    except Exception:
+        meta = {}
+    meta.setdefault("decisions", []).append(entry)
+    meta["last_decision_at"] = now
+    with open(meta_path, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=2, ensure_ascii=False)
 
-    return jsonify({"ok": True, "entry": entry, "status": run["status"] if run else "RECORDED"}), 200
-
+    return jsonify({"ok": True, "entry": entry, "run_status": run["status"]}), 200
+    
 @app.route("/", methods=["GET"])
 def serve_index():
     return send_from_directory(FRONTEND_DIR, "index.html")

@@ -2,207 +2,1200 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>Campaign Simulator (운영 모드)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:20px;color:#1f2937;background:#f9fafb}
-.header-bar{display:flex;justify-content:space-between;align-items:center;background:#1e293b;color:#fff;padding:12px 20px;border-radius:8px;margin-bottom:16px}
-.role-box select{padding:6px 10px;border-radius:4px;font-weight:bold;background:#f8fafc;color:#0f172a}
-pre{background:#f3f4f6;padding:10px;overflow-x:auto;border-radius:4px;font-size:13px}
-button{margin:4px;padding:7px 14px;cursor:pointer;border:none;border-radius:4px;font-weight:bold}
-.btn-primary{background:#2563eb;color:#fff}
-.btn-approve{background:#16a34a;color:#fff}
-.btn-reject{background:#dc2626;color:#fff}
-.btn-disabled{background:#9ca3af;color:#fff;cursor:not-allowed}
-.card{background:#fff;border:1px solid #e5e7eb;padding:16px;margin:12px 0;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.05)}
-.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold;color:#fff}
-.badge-NEEDS_APPROVAL{background:#d97706}
-.badge-PARTIALLY_APPROVED{background:#2563eb}
-.badge-APPROVED{background:#16a34a}
-.badge-REJECTED_REPLANNING{background:#dc2626}
-.badge-QUEUED{background:#6b7280}
-.approver-table{width:100%;border-collapse:collapse;margin-top:10px}
-.approver-table th, .approver-table td{border:1px solid #e5e7eb;padding:10px;text-align:left;font-size:14px}
-.approver-table th{background:#f8fafc}
-.notif-item{background:#eff6ff;border-left:4px solid #3b82f6;padding:8px 12px;margin:6px 0;font-size:13px;border-radius:0 4px 4px 0}
-.replan-alert{background:#fff5f5;border:1px solid #feb2b2;padding:12px;margin-top:10px;border-radius:6px}
-.badge-BLOCKED_BY_DOMAIN_RULE{background:#991b1b}
-.domain-block-banner{background:#fef2f2;border:2px solid #dc2626;color:#7f1d1d;padding:12px;border-radius:6px;margin:10px 0;font-size:14px}
-.dept-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
-.dept-card{background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:12px}
-.dept-card h5{margin:0 0 8px 0;font-size:15px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
-.action-item{background:#fff;border:1px solid #e2e8f0;padding:8px;border-radius:4px;margin-bottom:6px;font-size:13px}
-.audit-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
-.audit-table th, .audit-table td{border:1px solid #e5e7eb;padding:8px;text-align:left}
-.audit-table th{background:#f1f5f9}
+  :root {
+    --bg-canvas: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-subtle: #f1f5f9;
+    --border-subtle: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --brand-600: #2563eb;
+    --brand-700: #1d4ed8;
+    --brand-50: #eff6ff;
+    --brand-100: #dbeafe;
+    --success-600: #16a34a;
+    --success-700: #15803d;
+    --success-50: #f0fdf4;
+    --success-200: #bbf7d0;
+    --danger-600: #dc2626;
+    --danger-700: #b91c1c;
+    --danger-50: #fef2f2;
+    --danger-200: #fecaca;
+    --warning-600: #d97706;
+    --warning-50: #fffbeb;
+    --warning-200: #fde68a;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+    --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .icon {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+  .icon-sm { width: 14px; height: 14px; }
+  .icon-lg { width: 20px; height: 20px; }
+
+  /* Top Navigation Bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 24px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .brand-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .env-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    letter-spacing: 0.02em;
+  }
+
+  .brand-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: block;
+    margin-top: 1px;
+  }
+
+  .role-switcher {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-subtle);
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .role-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .role-select {
+    appearance: none;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 5px 28px 5px 10px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+  .role-select:focus {
+    outline: none;
+    border-color: var(--brand-600);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  /* Main Layout */
+  .container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 1080px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: sticky;
+    top: 88px;
+  }
+
+  @media (max-width: 1080px) {
+    .sidebar { position: static; }
+  }
+
+  .main-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .card-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--brand-50);
+    color: var(--brand-600);
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--brand-100);
+  }
+
+  .card-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .card-body {
+    padding: 20px;
+  }
+
+  /* Form Elements */
+  .form-group {
+    margin-bottom: 14px;
+  }
+  .form-group:last-child { margin-bottom: 0; }
+
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .input-control, .select-control {
+    width: 100%;
+    padding: 8px 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .input-control:focus, .select-control:focus {
+    outline: none;
+    border-color: var(--brand-600);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  .input-mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .file-dropzone {
+    position: relative;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 16px 12px;
+    text-align: center;
+    background: var(--bg-canvas);
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+  .file-dropzone:hover, .file-dropzone.has-file {
+    border-color: var(--brand-600);
+    background: var(--brand-50);
+  }
+  .file-dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .file-dropzone-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .file-name-display {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--brand-700);
+    word-break: break-all;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-full { width: 100%; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  .btn-primary {
+    background: var(--brand-600);
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+  }
+  .btn-primary:hover { background: var(--brand-700); }
+
+  .btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover { background: var(--bg-subtle); }
+
+  .btn-approve {
+    background: var(--success-600);
+    color: #ffffff;
+  }
+  .btn-approve:hover { background: var(--success-700); }
+
+  .btn-reject {
+    background: #ffffff;
+    color: var(--danger-600);
+    border-color: var(--danger-200);
+  }
+  .btn-reject:hover {
+    background: var(--danger-50);
+    border-color: var(--danger-600);
+  }
+
+  .btn-disabled {
+    background: var(--bg-subtle);
+    color: var(--text-muted);
+    border-color: var(--border-subtle);
+    cursor: not-allowed;
+  }
+
+  .upload-feedback {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--success-700);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  .upload-feedback:empty { display: none; }
+
+  /* Status Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge-NEEDS_APPROVAL { background: var(--warning-50); color: var(--warning-600); border-color: var(--warning-200); }
+  .badge-PARTIALLY_APPROVED { background: var(--brand-50); color: var(--brand-600); border-color: var(--brand-100); }
+  .badge-APPROVED { background: var(--success-50); color: var(--success-600); border-color: var(--success-200); }
+  .badge-REJECTED_REPLANNING { background: var(--danger-50); color: var(--danger-600); border-color: var(--danger-200); }
+  .badge-BLOCKED_BY_DOMAIN_RULE { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
+  .badge-QUEUED { background: var(--bg-subtle); color: var(--text-secondary); border-color: var(--border-subtle); }
+
+  /* Inline Status Tags */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .status-approved { background: var(--success-50); color: var(--success-700); }
+  .status-rejected { background: var(--danger-50); color: var(--danger-700); }
+  .status-pending { background: var(--warning-50); color: var(--warning-600); }
+
+  /* AI Recommendations Grid */
+  .dept-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 900px) {
+    .dept-grid { grid-template-columns: 1fr; }
+  }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    background: var(--bg-canvas);
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dept-card {
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dept-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .dept-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .dept-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .action-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 12.5px;
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.02);
+  }
+
+  .action-title {
+    font-weight: 700;
+    color: var(--brand-700);
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  .action-meta {
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    line-height: 1.45;
+  }
+
+  .action-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .metric-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .metric-recovery { background: var(--success-50); color: var(--success-700); }
+  .metric-adjust { background: var(--warning-50); color: var(--warning-600); }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+  }
+
+  th {
+    background: var(--bg-canvas);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+
+  /* Banners & Alerts */
+  .rule-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    background: var(--bg-canvas);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 16px;
+  }
+
+  .domain-block-banner {
+    background: var(--danger-50);
+    border: 1px solid var(--danger-200);
+    border-left: 4px solid var(--danger-600);
+    color: #7f1d1d;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .erp-sync-box {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--success-50);
+    border: 1px solid var(--success-200);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    color: var(--success-700);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .replan-alert {
+    margin-top: 16px;
+    background: var(--danger-50);
+    border: 1px solid var(--danger-200);
+    border-radius: var(--radius-md);
+    padding: 16px;
+  }
+  .replan-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 13.5px;
+    color: var(--danger-700);
+    margin-bottom: 10px;
+  }
+  .replan-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    background: #ffffff;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--danger-200);
+  }
+  .replan-stat-label { font-size: 11.5px; color: var(--text-secondary); }
+  .replan-stat-val { font-size: 16px; font-weight: 700; color: var(--success-600); margin-top: 2px; }
+
+  /* Notifications */
+  .notif-section { margin-top: 18px; }
+  .notif-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .notif-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--brand-600);
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    border-radius: 4px;
+  }
+  .notif-channel {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    background: var(--brand-50);
+    color: var(--brand-700);
+    border-radius: 4px;
+  }
+
+  /* Artifacts & JSON */
+  .artifact-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .download-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: var(--brand-50);
+    color: var(--brand-700);
+    border: 1px solid var(--brand-100);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .download-link:hover { background: var(--brand-100); }
+
+  details summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  details summary:hover { color: var(--text-primary); }
+
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 14px;
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 10px;
+  }
+
+  /* Modal & Toast */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-box {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 440px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-body { padding: 20px; }
+  .modal-footer {
+    padding: 12px 20px;
+    background: var(--bg-canvas);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 110;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .toast {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: slideUp 0.2s ease-out;
+  }
+  .toast.error { background: var(--danger-600); }
+  @keyframes slideUp {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
 </style>
 </head>
 <body>
 
-<div class="header-bar">
-  <div>
-    <h2 style="margin:0;font-size:20px;">📊 AX Campaign & Cash Flow Simulator</h2>
-    <span style="font-size:12px;color:#cbd5e1;">다중 결재 워크플로 및 예외 대응 운영 콘솔</span>
+<!-- Top Header -->
+<header class="topbar">
+  <div class="brand-area">
+    <div class="brand-logo" aria-hidden="true">
+      <svg class="icon icon-lg" viewBox="0 0 24 24">
+        <line x1="18" y1="20" x2="18" y2="10"></line>
+        <line x1="12" y1="20" x2="12" y2="4"></line>
+        <line x1="6" y1="20" x2="6" y2="14"></line>
+      </svg>
+    </div>
+    <div>
+      <h1 class="brand-title">
+        Campaign & Cash Flow Simulator
+      </h1>
+      <span class="brand-subtitle">다중 결재 워크플로 및 예외 대응 운영 콘솔</span>
+    </div>
   </div>
-  <div class="role-box">
-    <label for="currentRole" style="font-size:13px;margin-right:6px;">👤 현재 로그인 역할:</label>
-    <select id="currentRole" onchange="onRoleChange()">
+
+  <div class="role-switcher">
+    <label for="currentRole" class="role-label">
+      <svg class="icon icon-sm" viewBox="0 0 24 24">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      현재 세션 역할
+    </label>
+    <select id="currentRole" class="role-select" onchange="onRoleChange()">
       <option value="purchase_lead">구매팀장 (purchase_lead)</option>
       <option value="finance_lead">재무팀장 (finance_lead)</option>
       <option value="marketing_staff">마케팅담당 (결재권한 없음)</option>
     </select>
   </div>
+</header>
+
+<!-- Main Workspace -->
+<main class="container">
+  <!-- Left Control Sidebar -->
+  <aside class="sidebar">
+    <!-- Step 1: Upload CSV -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="step-num">1</span>
+          <h2 class="card-title">캠페인 수요 데이터 업로드</h2>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Demand CSV 파일 선택</label>
+          <div class="file-dropzone" id="dropzone">
+            <input type="file" id="demandfile" accept=".csv" onchange="onFileSelected(this)" />
+            <div class="file-dropzone-text">
+              <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--brand-600)">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>CSV 파일을 드래그하거나 클릭하여 선택</span>
+              <span id="selectedFileName" class="file-name-display"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="campaign_name" class="form-label">캠페인명 (선택)</label>
+          <input type="text" id="campaign_name" class="input-control" placeholder="예: 2026_Q4_Promo" />
+        </div>
+
+        <button class="btn btn-secondary btn-full" onclick="upload()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          서버로 데이터 업로드
+        </button>
+
+        <div id="uploadResult" class="upload-feedback"></div>
+      </div>
+    </section>
+
+    <!-- Step 2: Run Simulation -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="step-num">2</span>
+          <h2 class="card-title">시뮬레이션 실행 설정</h2>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label for="demand_file_input" class="form-label">대상 파일명 (Demand Filename)</label>
+          <input id="demand_file_input" class="input-control input-mono" placeholder="업로드 시 자동 입력됨" />
+        </div>
+
+        <div class="form-group">
+          <label for="scenario" class="form-label">재무/발주 시나리오</label>
+          <select id="scenario" class="select-control">
+            <option value="base">base (기본 시나리오)</option>
+            <option value="po_split">po_split (PO 분할 50:50)</option>
+            <option value="po_shift">po_shift (PO 연기 1개월)</option>
+            <option value="conservative">conservative (보수적)</option>
+            <option value="optimistic">optimistic (낙관적)</option>
+          </select>
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="startRun()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          시뮬레이션 실행 (Start Run)
+        </button>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Right Main Content -->
+  <div class="main-stage">
+    <!-- Step 3: AI Recommendations -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="step-num">3</span>
+          <h2 class="card-title">AI 부서별 액션 권고안</h2>
+        </div>
+        <span id="aiModelBadge" class="env-pill">Engine: Standby</span>
+      </div>
+      <div class="card-body">
+        <div id="aiRecContainer" class="dept-grid">
+          <div class="empty-state">
+            <svg class="icon icon-lg" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>좌측 패널에서 시뮬레이션을 실행하면 부서별 최적화 권고안이 생성됩니다.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Approval Workflow -->
+    <section class="card" id="workflowCard" style="display:none; border-color: var(--border-strong);">
+      <div class="card-header">
+        <div class="card-title-group">
+          <svg class="icon" viewBox="0 0 24 24" style="color:var(--brand-600)">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <h2 class="card-title">다중 결재 승인 워크플로 (Multi-Approval Workflow)</h2>
+        </div>
+        <span id="statusBadge" class="badge">STATUS</span>
+      </div>
+      <div class="card-body">
+        <div class="rule-bar">
+          <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--brand-600)">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="approvalRuleText"></span>
+        </div>
+
+        <div id="domainBlockBanner" class="domain-block-banner" style="display:none;">
+          <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--danger-600); margin-top:1px;">
+            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div>
+            <strong>도메인 제약 위반으로 실행 차단됨 (BLOCKED_BY_DOMAIN_RULE)</strong>
+            <p id="domainBlockReason" style="margin:4px 0 0 0;"></p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>결재 단계</th>
+                <th>담당 역할</th>
+                <th>결재 상태</th>
+                <th>처리자 / 시각</th>
+                <th>코멘트</th>
+                <th>결재 액션 (현재 역할 기준)</th>
+              </tr>
+            </thead>
+            <tbody id="approverTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="erpSyncBox" class="erp-sync-box" style="display:none;">
+          <svg class="icon icon-lg" viewBox="0 0 24 24">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <div>
+            <strong>ERP 연동 완료:</strong> <span id="erpSyncText" class="input-mono"></span>
+          </div>
+        </div>
+
+        <div class="notif-section">
+          <div class="notif-header">
+            <svg class="icon icon-sm" viewBox="0 0 24 24">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span>실시간 Slack / Email 알림 발송 내역</span>
+          </div>
+          <div id="notificationList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: Decision Audit Log & Replan -->
+    <section class="card" id="decisionCard" style="display:none;">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="step-num">4</span>
+          <h2 class="card-title">결재 감사 이력 및 예외 재계산 결과</h2>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>결재 시각 (UTC)</th>
+                <th>담당 역할</th>
+                <th>처리자</th>
+                <th>결재 결과</th>
+                <th>코멘트</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="replanSection" class="replan-alert" style="display:none;">
+          <div class="replan-header">
+            <svg class="icon" viewBox="0 0 24 24">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>반려(Reject) 대응: 캠페인 30% 축소 플랜 B 자동 재계산 결과</span>
+          </div>
+          <div id="replanSummaryCards"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5: Artifacts & Raw Data -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="step-num">5</span>
+          <h2 class="card-title">산출물 다운로드 및 원본 데이터</h2>
+        </div>
+        <div id="downloadArea"></div>
+      </div>
+      <div class="card-body">
+        <details>
+          <summary>
+            <svg class="icon icon-sm" viewBox="0 0 24 24">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+            원본 JSON 페이로드 펼쳐보기 (개발/감사 검증용)
+          </summary>
+          <pre id="runStatus">No run yet</pre>
+        </details>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- Decision Comment Modal -->
+<div class="modal-backdrop" id="decisionModal">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <span id="modalTitle">결재 의견 입력</span>
+      <button class="btn btn-sm btn-secondary" onclick="closeDecisionModal()" aria-label="닫기">
+        <svg class="icon icon-sm" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="modalDesc" style="margin:0 0 12px 0; font-size:13px; color:var(--text-secondary);"></p>
+      <label for="modalCommentInput" class="form-label">결재 코멘트 (선택 사항)</label>
+      <input type="text" id="modalCommentInput" class="input-control" placeholder="승인 또는 반려 사유를 입력하세요..." onkeydown="if(event.key==='Enter') submitDecisionModal()" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeDecisionModal()">취소</button>
+      <button class="btn btn-primary" id="modalConfirmBtn" onclick="submitDecisionModal()">확인</button>
+    </div>
+  </div>
 </div>
 
-<div class="card">
-  <h4 style="margin-top:0;">1) Upload campaign CSV</h4>
-  <input type="file" id="demandfile" accept=".csv" />
-  <input type="text" id="campaign_name" placeholder="campaign name (optional)" style="padding:5px;" />
-  <button class="btn-primary" onclick="upload()">Upload</button>
-  <div id="uploadResult" style="margin-top:6px;font-size:13px;color:#059669;"></div>
-</div>
-
-<div class="card">
-  <h4 style="margin-top:0;">2) Start Simulation Run</h4>
-  Demand filename: <input id="demand_file_input" style="width:280px;padding:5px;" />
-  Scenario:
-  <select id="scenario" style="padding:5px;">
-    <option value="base">base (기본 시나리오)</option>
-    <option value="po_split">po_split (PO 분할 50:50)</option>
-    <option value="po_shift">po_shift (PO 연기 1개월)</option>
-    <option value="conservative">conservative (보수적)</option>
-    <option value="optimistic">optimistic (낙관적)</option>
-  </select>
-  <button class="btn-primary" onclick="startRun()">Start Run</button>
-</div>
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <h4 style="margin:0;">3) AI Recommendations (부서별 액션 권고)</h4>
-    <span id="aiModelBadge" style="font-size:12px;color:#64748b;"></span>
-  </div>
-  <div id="aiRecContainer" class="dept-grid">
-    <div style="color:#6b7280;font-size:13px;">시뮬레이션 실행 후 부서별 권고안이 표시됩니다.</div>
-  </div>
-</div>
-
-<div class="card" id="workflowCard" style="display:none;border:2px solid #cbd5e1;">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <h3 style="margin:0;">🔐 다중 결재 승인 워크플로 (Multi-Approval Workflow)</h3>
-    <span id="statusBadge" class="badge">STATUS</span>
-  </div>
-  <p id="approvalRuleText" style="font-size:13px;color:#4b5563;margin:6px 0;"></p>
-  <div id="domainBlockBanner" class="domain-block-banner" style="display:none;">
-    <strong>⛔ 도메인 제약 위반으로 실행 차단됨 (BLOCKED_BY_DOMAIN_RULE)</strong>
-    <p id="domainBlockReason" style="margin:6px 0 0 0;"></p>
-  </div>
-  <table class="approver-table">
-    <thead>
-      <tr>
-        <th>결재 단계</th>
-        <th>담당 역할</th>
-        <th>결재 상태</th>
-        <th>처리자 / 시각</th>
-        <th>코멘트</th>
-        <th>결재 액션 (현재 역할 기준)</th>
-      </tr>
-    </thead>
-    <tbody id="approverTableBody"></tbody>
-  </table>
-
-  <div id="erpSyncBox" style="display:none;margin-top:12px;padding:10px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;font-size:13px;">
-    <strong>🚀 ERP 연동 상태:</strong> <span id="erpSyncText"></span>
-  </div>
-
-  <div style="margin-top:16px;">
-    <h4 style="margin:0 0 6px 0;font-size:14px;">🔔 실시간 Slack / Email 알림 발송 내역</h4>
-    <div id="notificationList"></div>
-  </div>
-</div>
-
-<div class="card" id="decisionCard" style="display:none;">
-  <h4 style="margin-top:0;">4) Decision Audit Log & Replan Result</h4>
-  <div><strong>📋 결재 감사 이력 (Audit Trail):</strong></div>
-  <table class="audit-table">
-    <thead>
-      <tr>
-        <th>결재 시각 (UTC)</th>
-        <th>담당 역할</th>
-        <th>처리자</th>
-        <th>결재 결과</th>
-        <th>코멘트</th>
-      </tr>
-    </thead>
-    <tbody id="auditTableBody"></tbody>
-  </table>
-  
-  <div id="replanSection" class="replan-alert" style="display:none;">
-    <strong>🔄 거절(Reject) 대응: 캠페인 30% 축소 플랜 B 자동 재계산 결과</strong>
-    <div id="replanSummaryCards" style="margin-top:8px;font-size:14px;"></div>
-  </div>
-</div>
-
-<div class="card">
-  <h4 style="margin-top:0;">5) Artifacts & Raw Data</h4>
-  <div id="downloadArea" style="margin-bottom:10px;"></div>
-  <details>
-    <summary style="cursor:pointer;font-size:13px;color:#4b5563;font-weight:bold;">🔍 원본 JSON 데이터 펼쳐보기 (개발/감사 검증용)</summary>
-    <pre id="runStatus" style="margin-top:8px;">No run yet</pre>
-  </details>
-</div>
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
 
 <script>
 let currentRunId = null;
 let lastRunData = null;
+let pollHandles = {};
+let pendingDecision = null;
 
-function onRoleChange(){
-  if(lastRunData) renderWorkflow(lastRunData);
+const ICONS = {
+  check: `<svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  x: `<svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+  clock: `<svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+  download: `<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+  package: `<svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`,
+  briefcase: `<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>`,
+  megaphone: `<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>`
+};
+
+function showToast(msg, isError = false) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.innerHTML = `${isError ? ICONS.x : ICONS.check} <span>${msg}</span>`;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
 }
 
-async function upload(){
+function onFileSelected(input) {
+  const dropzone = document.getElementById('dropzone');
+  const label = document.getElementById('selectedFileName');
+  if (input.files && input.files.length > 0) {
+    dropzone.classList.add('has-file');
+    label.innerText = input.files[0].name;
+  } else {
+    dropzone.classList.remove('has-file');
+    label.innerText = '';
+  }
+}
+
+function onRoleChange() {
+  if (lastRunData) renderWorkflow(lastRunData);
+}
+
+async function upload() {
   const fileInput = document.getElementById('demandfile');
-  if(!fileInput.files || fileInput.files.length === 0){
-    alert('CSV 파일을 먼저 선택하세요.');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showToast('CSV 파일을 먼저 선택하세요.', true);
     return;
   }
   const f = fileInput.files[0];
   const fd = new FormData();
   fd.append('demand_file', f);
   fd.append('campaign_name', document.getElementById('campaign_name').value || '');
-  const res = await fetch('/api/campaigns', {method:'POST', body:fd});
-  const j = await res.json();
-  document.getElementById('uploadResult').innerText = "✅ 업로드 완료: " + j.file;
-  document.getElementById('demand_file_input').value = j.file;
+
+  try {
+    const res = await fetch('/api/campaigns', { method: 'POST', body: fd });
+    const j = await res.json();
+    document.getElementById('uploadResult').innerHTML = `${ICONS.check} <span>업로드 완료: <strong class="input-mono">${j.file}</strong></span>`;
+    document.getElementById('demand_file_input').value = j.file;
+    showToast('캠페인 CSV 파일이 업로드되었습니다.');
+  } catch (e) {
+    showToast('파일 업로드 중 오류가 발생했습니다.', true);
+  }
 }
 
-async function startRun(){
+async function startRun() {
   const demand_file = document.getElementById('demand_file_input').value;
   const scenario = document.getElementById('scenario').value;
-  if(!demand_file){ alert('업로드된 파일명이 필요합니다.'); return; }
-  
+  if (!demand_file) {
+    showToast('업로드된 파일명이 필요합니다.', true);
+    return;
+  }
+
   document.getElementById('decisionCard').style.display = 'none';
   document.getElementById('replanSection').style.display = 'none';
   document.getElementById('erpSyncBox').style.display = 'none';
-  
-  const res = await fetch('/api/runs', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({demand_file, scenario})
-  });
-  const j = await res.json();
-  currentRunId = j.run_id;
-  document.getElementById('runStatus').innerText = "Run queued: " + JSON.stringify(j,null,2);
-  if(j.run_id) pollRun(j.run_id);
+
+  try {
+    const res = await fetch('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ demand_file, scenario })
+    });
+    const j = await res.json();
+    currentRunId = j.run_id;
+    document.getElementById('runStatus').innerText = "Run queued: " + JSON.stringify(j, null, 2);
+    showToast(`시뮬레이션이 시작되었습니다 (${scenario})`);
+    if (j.run_id) pollRun(j.run_id);
+  } catch (e) {
+    showToast('시뮬레이션 요청에 실패했습니다.', true);
+  }
 }
 
-function renderWorkflow(j){
-  if(!j.approval_state) return;
+function renderWorkflow(j) {
+  if (!j.approval_state) return;
   document.getElementById('workflowCard').style.display = 'block';
-  
+
   const badge = document.getElementById('statusBadge');
   badge.innerText = j.status;
   badge.className = 'badge badge-' + j.status;
-  
-  document.getElementById('approvalRuleText').innerText = "📌 적용 결재 규칙: " + j.approval_state.rule;
+
+  document.getElementById('approvalRuleText').innerText = "적용 결재 규칙: " + j.approval_state.rule;
 
   const currentRole = document.getElementById('currentRole').value;
   const tbody = document.getElementById('approverTableBody');
@@ -216,19 +1209,23 @@ function renderWorkflow(j){
   rolesInfo.forEach(r => {
     const info = j.approval_state.approvals[r.key] || { status: 'PENDING' };
     const tr = document.createElement('tr');
-    
-    let statusHtml = info.status;
-    if(info.status === 'APPROVED') statusHtml = '<span style="color:#16a34a;font-weight:bold;">✅ APPROVED</span>';
-    else if(info.status === 'REJECTED') statusHtml = '<span style="color:#dc2626;font-weight:bold;">❌ REJECTED</span>';
-    else statusHtml = '<span style="color:#d97706;font-weight:bold;">⏳ PENDING</span>';
 
-    const actorText = info.actor ? `${info.actor} (${info.at.slice(11,19)})` : '-';
-    
+    let statusHtml = '';
+    if (info.status === 'APPROVED') {
+      statusHtml = `<span class="status-pill status-approved">${ICONS.check} APPROVED</span>`;
+    } else if (info.status === 'REJECTED') {
+      statusHtml = `<span class="status-pill status-rejected">${ICONS.x} REJECTED</span>`;
+    } else {
+      statusHtml = `<span class="status-pill status-pending">${ICONS.clock} PENDING</span>`;
+    }
+
+    const actorText = info.actor ? `<span class="input-mono">${info.actor}</span> <span style="color:var(--text-muted);font-size:12px;">(${info.at.slice(11, 19)})</span>` : '-';
+
     const blockBanner = document.getElementById('domainBlockBanner');
     const domainChk = (j.summary && j.summary.domain_constraint_check) || {};
-    if(j.status === 'BLOCKED_BY_DOMAIN_RULE' || domainChk.status === 'VIOLATED'){
-      blockBanner.style.display = 'block';
-      document.getElementById('domainBlockReason').innerText = 
+    if (j.status === 'BLOCKED_BY_DOMAIN_RULE' || domainChk.status === 'VIOLATED') {
+      blockBanner.style.display = 'flex';
+      document.getElementById('domainBlockReason').innerText =
         `${domainChk.reason} [차단된 발주: ${(domainChk.blocked_pos || []).join(', ')}]`;
     } else {
       blockBanner.style.display = 'none';
@@ -236,17 +1233,19 @@ function renderWorkflow(j){
 
     let actionHtml = '';
     const isTerminal = (j.status === 'APPROVED' || j.status === 'REJECTED_REPLANNING' || j.status === 'BLOCKED_BY_DOMAIN_RULE');
-    if(!isTerminal && info.status === 'PENDING'){
-      if(currentRole === r.key){
+    if (!isTerminal && info.status === 'PENDING') {
+      if (currentRole === r.key) {
         actionHtml = `
-          <button class="btn-approve" onclick="sendDecision('${j.id}', '${r.key}', 'APPROVED')">승인 (Approve)</button>
-          <button class="btn-reject" onclick="sendDecision('${j.id}', '${r.key}', 'REJECTED')">반려 (Reject)</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-approve" onclick="openDecisionModal('${j.id}', '${r.key}', 'APPROVED')">${ICONS.check} 승인</button>
+            <button class="btn btn-sm btn-reject" onclick="openDecisionModal('${j.id}', '${r.key}', 'REJECTED')">${ICONS.x} 반려</button>
+          </div>
         `;
       } else {
-        actionHtml = `<button class="btn-disabled" disabled>권한 없음 (${r.label} 전용)</button>`;
+        actionHtml = `<button class="btn btn-sm btn-disabled" disabled>권한 없음 (${r.label.split(' ')[0]})</button>`;
       }
     } else {
-      actionHtml = `<span style="color:#6b7280;font-size:12px;">처리 완료</span>`;
+      actionHtml = `<span style="color:var(--text-muted);font-size:12px;">처리 완료</span>`;
     }
 
     tr.innerHTML = `
@@ -260,8 +1259,8 @@ function renderWorkflow(j){
     tbody.appendChild(tr);
   });
 
-  if(j.erp_sync){
-    document.getElementById('erpSyncBox').style.display = 'block';
+  if (j.erp_sync) {
+    document.getElementById('erpSyncBox').style.display = 'flex';
     document.getElementById('erpSyncText').innerText = `${j.erp_sync.status} | Key: ${j.erp_sync.idempotency_key} | 시각: ${j.erp_sync.synced_at}`;
   }
 
@@ -270,113 +1269,200 @@ function renderWorkflow(j){
   (j.notifications || []).forEach(n => {
     const div = document.createElement('div');
     div.className = 'notif-item';
-    div.innerHTML = `<strong>[${n.channel}]</strong> 수신: <code>${n.recipient}</code> — ${n.message} <span style="color:#6b7280;font-size:11px;">(${n.sent_at.slice(11,19)})</span>`;
+    div.innerHTML = `
+      <div>
+        <span class="notif-channel">${n.channel}</span>
+        <span style="margin-left:6px;">수신: <code class="input-mono">${n.recipient}</code> — ${n.message}</span>
+      </div>
+      <span class="input-mono" style="color:var(--text-muted);font-size:11px;white-space:nowrap;">${n.sent_at.slice(11, 19)}</span>
+    `;
     notifList.appendChild(div);
   });
 }
 
-let pollHandles = {};
-function renderAiCards(rec){
+function renderAiCards(rec) {
   const container = document.getElementById('aiRecContainer');
-  if(!rec) return;
+  if (!rec) return;
   document.getElementById('aiModelBadge').innerText = `Engine: ${rec.model || 'AI Advisor'}`;
-  
+
   const depts = [
-    { key: 'purchase', title: '📦 구매팀 (Purchase)', items: rec.purchase || [] },
-    { key: 'sales', title: '💼 영업팀 (Sales)', items: rec.sales || [] },
-    { key: 'marketing', title: '📣 마케팅팀 (Marketing)', items: rec.marketing || [] }
+    { key: 'purchase', title: '구매팀 (Purchase)', icon: ICONS.package, items: rec.purchase || [] },
+    { key: 'sales', title: '영업팀 (Sales)', icon: ICONS.briefcase, items: rec.sales || [] },
+    { key: 'marketing', title: '마케팅팀 (Marketing)', icon: ICONS.megaphone, items: rec.marketing || [] }
   ];
 
   container.innerHTML = depts.map(d => {
-    const itemsHtml = d.items.length > 0 
+    const itemsHtml = d.items.length > 0
       ? d.items.map(item => `
           <div class="action-item">
-            <div style="font-weight:bold;color:#1d4ed8;margin-bottom:4px;">• ${item.action}</div>
-            <div style="color:#334155;margin-bottom:4px;"><strong>근거:</strong> ${item.rationale || '-'}</div>
-            ${item.expected_recovery ? `<div style="color:#059669;"><strong>기대효과:</strong> ${item.expected_recovery}</div>` : ''}
-            ${item.percent ? `<div style="color:#d97706;"><strong>조정비율:</strong> ${item.percent}% 축소</div>` : ''}
+            <div class="action-title">${item.action}</div>
+            <div class="action-meta"><strong>근거:</strong> ${item.rationale || '-'}</div>
+            <div class="action-tags">
+              ${item.expected_recovery ? `<span class="metric-chip metric-recovery">기대효과: ${item.expected_recovery}</span>` : ''}
+              ${item.percent ? `<span class="metric-chip metric-adjust">조정비율: ${item.percent}% 축소</span>` : ''}
+            </div>
           </div>
         `).join('')
-      : `<div style="color:#94a3b8;font-size:13px;">현재 추가 조치 권고 없음</div>`;
+      : `<div style="color:var(--text-muted);font-size:12.5px;padding:12px 0;text-align:center;">현재 추가 조치 권고 없음</div>`;
 
     return `
       <div class="dept-card">
-        <h5>${d.title}</h5>
+        <div class="dept-card-header">
+          <h3 class="dept-title">
+            <span class="dept-icon">${d.icon}</span>
+            ${d.title}
+          </h3>
+          <span class="env-pill">${d.items.length}건</span>
+        </div>
         ${itemsHtml}
       </div>
     `;
   }).join('');
 }
 
-async function updateRunView(runId){
-  const res = await fetch('/api/runs/' + runId);
-  const j = await res.json();
-  lastRunData = j;
-  
-  document.getElementById('runStatus').innerText = JSON.stringify(j, null, 2);
-  renderWorkflow(j);
+async function fetchRunNoCache(runId) {
+  return fetch('/api/runs/' + runId, { cache: 'no-store' }).then(r => r.json());
+}
 
-  // 3) AI Recommendations 카드 렌더링
-  if(j.recommendations){
-    renderAiCards(j.recommendations);
-  }
+async function updateRunView(runId) {
+  try {
+    const j = await fetchRunNoCache(runId);
+    lastRunData = j;
 
-  // 4) 감사 로그 테이블 렌더링
-  if(j.decision_log && j.decision_log.audit){
-    document.getElementById('decisionCard').style.display = 'block';
-    const tbody = document.getElementById('auditTableBody');
-    tbody.innerHTML = j.decision_log.audit.map(log => {
-      const det = log.detail || {};
-      const isApp = det.decision === 'APPROVED';
-      const badge = isApp 
-        ? '<span style="color:#16a34a;font-weight:bold;">✅ APPROVED</span>' 
-        : '<span style="color:#dc2626;font-weight:bold;">❌ REJECTED</span>';
-      return `
-        <tr>
-          <td>${log.at.replace('T', ' ').slice(0, 19)}</td>
-          <td><strong>${log.role}</strong></td>
-          <td>${log.actor}</td>
-          <td>${badge}</td>
-          <td>${det.comment || '-'}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-  
-  // 거절 시 플랜 B 결과 요약 렌더링
-  if(j.status && j.status.includes('REJECTED')){
-    document.getElementById('decisionCard').style.display = 'block';
-    document.getElementById('replanSection').style.display = 'block';
-    if(j.replan_summary){
-      document.getElementById('replanSummaryCards').innerHTML = `
-        <div style="background:#fff;padding:10px;border-radius:4px;border:1px solid #fecaca;">
-          ✅ <strong>플랜 B(수요 30% 축소) 재계산 완료</strong><br>
-          • 변경된 현금 부족(Shortfall) 일수: <strong style="color:#16a34a;font-size:16px;">${j.replan_summary.shortfall_count}건</strong><br>
-          • 산출물 무결성 검증: ${j.replan_summary.missing_artifacts.length === 0 ? '통과 (이상 없음)' : '누락 있음'}
-        </div>
-      `;
-    } else {
-      document.getElementById('replanSummaryCards').innerText = "⏳ 수요 30% 축소 시나리오 자동 재계산 중...";
+    // 1) 기본 상태 출력(디버깅용)
+    document.getElementById('runStatus').innerText = JSON.stringify(j, null, 2);
+
+    // 2) 워크플로 렌더링(기존)
+    renderWorkflow(j);
+
+    // 3) 추천 카드 렌더링
+    if (j.recommendations) {
+      renderAiCards(j.recommendations);
     }
-  }
 
-  const dlArea = document.getElementById('downloadArea');
-  if(j.status && j.status !== 'QUEUED' && j.status !== 'FAILED'){
-    dlArea.innerHTML = `<a href="/artifacts/${runId}/full_cash_projection.csv" style="color:#2563eb;font-weight:bold;">📥 Download full_cash_projection.csv</a>`;
+    // 4) 필수 승인자(required approvers) 명시적 노출
+    const req = j.required_approvers || (j.decision && j.decision.required_approvers) || [];
+    const reqEl = document.getElementById('requiredList');
+    if (reqEl) {
+      reqEl.innerText = req.length ? '필요 승인자: ' + req.join(', ') : '필요 승인자: 없음';
+    }
+
+    // 5) approval 상태 렌더링 (decision_log 우선 -> fallback to j.decision.approvals)
+    const auditList = (j.decision_log && j.decision_log.audit) ? j.decision_log.audit :
+                      (j.decision && j.decision.approvals) ? j.decision.approvals : [];
+    if (auditList && auditList.length > 0) {
+      document.getElementById('decisionCard').style.display = 'block';
+      const tbody = document.getElementById('auditTableBody');
+      tbody.innerHTML = auditList.map(log => {
+        const det = log.detail || log; // log may already be an approval object
+        const isApp = (det.decision === 'APPROVED');
+        const badge = isApp
+          ? `<span class="status-pill status-approved">${ICONS.check} APPROVED</span>`
+          : `<span class="status-pill status-rejected">${ICONS.x} REJECTED</span>`;
+        const at = (log.at || det.at || '').replace('T', ' ').slice(0, 19);
+        return `
+          <tr>
+            <td class="input-mono" style="font-size:12px;">${at}</td>
+            <td><strong>${det.role || log.role || '-'}</strong></td>
+            <td class="input-mono" style="font-size:12px;">${det.actor || log.actor || '-'}</td>
+            <td>${badge}</td>
+            <td>${det.comment || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      // no approvals yet - hide or show empty message
+      document.getElementById('decisionCard').style.display = 'none';
+      const tbody = document.getElementById('auditTableBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5">승인 내역 없음</td></tr>';
+    }
+
+    // 6) CEO(격상) 표시: required_approvers에 group_ceo 포함시 강조
+    const escalationEl = document.getElementById('escalationAlert');
+    if (req.includes('group_ceo')) {
+      if (escalationEl) {
+        escalationEl.style.display = 'block';
+        escalationEl.innerText = '주의: 이 건은 CEO 승인 필요(격상됨)';
+      }
+    } else {
+      if (escalationEl) escalationEl.style.display = 'none';
+    }
+
+    // 7) Replan 섹션(기존 로직 유지)
+    if (j.status && j.status.includes('REJECTED')) {
+      document.getElementById('decisionCard').style.display = 'block';
+      document.getElementById('replanSection').style.display = 'block';
+      if (j.replan_summary) {
+        document.getElementById('replanSummaryCards').innerHTML = `
+          <div class="replan-grid">
+            <div>
+              <div class="replan-stat-label">변경된 현금 부족(Shortfall) 일수</div>
+              <div class="replan-stat-val">${j.replan_summary.shortfall_count}건</div>
+            </div>
+            <div>
+              <div class="replan-stat-label">산출물 무결성 검증</div>
+              <div class="replan-stat-val" style="font-size:14px;margin-top:4px;">
+                ${j.replan_summary.missing_artifacts.length === 0 ? '통과 (이상 없음)' : '누락 있음'}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        document.getElementById('replanSummaryCards').innerHTML = `<span style="font-size:13px;color:var(--danger-700);">수요 30% 축소 시나리오 자동 재계산 중...</span>`;
+      }
+    } else {
+      document.getElementById('replanSection').style.display = 'none';
+    }
+
+    // 8) 다운로드 링크 노출(기존)
+    const dlArea = document.getElementById('downloadArea');
+    if (j.status && j.status !== 'QUEUED' && j.status !== 'FAILED') {
+      dlArea.innerHTML = `<a href="/artifacts/${runId}/full_cash_projection.csv" class="download-link">${ICONS.download} full_cash_projection.csv 다운로드</a>`;
+    } else {
+      dlArea.innerHTML = '';
+    }
+
+  } catch (err) {
+    console.error('updateRunView error', err);
   }
 }
 
-async function pollRun(runId){
-  if(pollHandles[runId]) return;
+async function pollRun(runId) {
+  if (pollHandles[runId]) return;
   await updateRunView(runId);
   pollHandles[runId] = setInterval(() => updateRunView(runId), 2000);
 }
 
-async function sendDecision(runId, role, decision){
+/* Modal-based Decision Flow */
+function openDecisionModal(runId, role, decision) {
+  pendingDecision = { runId, role, decision };
   const label = role === 'purchase_lead' ? '구매팀장' : '재무팀장';
-  const comment = prompt(`[${label}] ${decision} 결재 의견을 입력하세요 (선택):`);
-  if(comment === null) return;
-  
+  const actionLabel = decision === 'APPROVED' ? '승인 (Approve)' : '반려 (Reject)';
+  document.getElementById('modalTitle').innerText = `${label} — ${actionLabel}`;
+  document.getElementById('modalDesc').innerText = `해당 시뮬레이션 건에 대해 ${actionLabel} 처리를 진행합니다.`;
+  const input = document.getElementById('modalCommentInput');
+  input.value = '';
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  confirmBtn.className = decision === 'APPROVED' ? 'btn btn-approve' : 'btn btn-reject';
+  confirmBtn.innerText = actionLabel;
+  document.getElementById('decisionModal').classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeDecisionModal() {
+  document.getElementById('decisionModal').classList.remove('open');
+  pendingDecision = null;
+}
+
+async function submitDecisionModal() {
+  if (!pendingDecision) return;
+  const { runId, role, decision } = pendingDecision;
+  const comment = document.getElementById('modalCommentInput').value;
+  closeDecisionModal();
+  await sendDecision(runId, role, decision, comment);
+}
+
+async function sendDecision(runId, role, decision, comment = '') {
   const res = await fetch('/api/runs/' + runId + '/decision', {
     method: 'POST',
     headers: {
@@ -385,13 +1471,14 @@ async function sendDecision(runId, role, decision){
       'X-Role': role,
       'X-Auth-Token': 'admin'
     },
-    body: JSON.stringify({decision, role, comment})
+    body: JSON.stringify({ decision, role, comment })
   });
   const j = await res.json();
-  if(!res.ok){
-    alert("오류: " + (j.error || "권한이 없습니다."));
+  if (!res.ok) {
+    showToast(j.error || "결재 권한이 없습니다.", true);
     return;
   }
+  showToast(`결재 처리가 완료되었습니다 (${decision})`);
   await updateRunView(runId);
 }
 </script>

@@ -11,7 +11,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 def build_prompt(run_id, summary, top_pos):
     prompt = {
-        "instruction": "Given the run summary and top purchase orders, generate department-specific action plans (purchase, sales, marketing). Return JSON object with keys purchase/sales/marketing, each a list of actions with rationale and estimated impact.",
+        "instruction": "Given run summary, top_pos, and bottleneck_skus list, produce JSON with purchase/sales/marketing actions. IMPORTANT: If bottleneck_skus is non-empty, do NOT recommend 'postpone/split PO' as primary solution; instead recommend 'campaign volume limits' and 'SKU substitution' where feasible. Include rationale and estimated recovery.",
         "run_id": run_id,
         "summary": summary,
         "top_pos": top_pos
