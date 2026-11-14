@@ -36,6 +36,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      - name: Install system dependencies for pycairo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev pkg-config python3-dev
+
       - name: Install pinned dependencies
         run: |
           python -m pip install --upgrade pip
@@ -57,7 +62,7 @@ jobs:
       - name: Generate initial run metadata (start)
         id: meta_start
         run: |
-          SCENARIO="${{ github.event.inputs.scenario }}"
+          SCENARIO="${{ github.event.inputs.scenario || 'base' }}"
           python3 masil-poc/backend/run_metadata.py --scenario "$SCENARIO" --assumptions masil-poc/inputs/assumptions.csv --out masil-poc/results
           RUN_ID=$(python3 -c "import json,os; print(json.load(open(os.path.join('masil-poc','results','run_metadata.json'))).get('run_id'))")
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "None" ]; then
