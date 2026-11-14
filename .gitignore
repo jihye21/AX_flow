@@ -1,0 +1,34 @@
+# 시뮬레이션 실행 결과물 및 업로드 임시 파일
+runs/
+masil-poc/results/
+*.log
+
+# 파이썬 캐시 및 컴파일 파일
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 파이썬 가상환경
+.venv/
+venv/
+ENV/
+env/
+
+# 테스트 및 커버리지 캐시
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 환경 변수 및 민감한 API 키
+.env
+.env.local
+*.pem
+*.key
+
+# 에디터 및 OS 임시 파일
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
