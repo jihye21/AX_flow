@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -39,11 +39,18 @@ jobs:
       - name: Install system dependencies for pycairo
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcairo2-dev pkg-config python3-dev
+          sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            pkg-config \
+            python3-dev \
+            ninja-build
 
       - name: Install pinned dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --only-binary=pycairo pycairo || true
           pip install -r requirements-lock.txt
           if [ -f "masil-poc/pyproject.toml" ] || [ -f "masil-poc/setup.py" ]; then
             pip install --no-deps -e ./masil-poc
@@ -75,7 +82,7 @@ jobs:
       - name: Run simulator and generators (into run-specific folder)
         id: run_sim
         run: |
-          SCENARIO="${{ github.event.inputs.scenario }}"
+          SCENARIO="${{ github.event.inputs.scenario || 'base' }}"
           RUN_ID="${{ steps.meta_start.outputs.run_id }}"
           RUN_OUT="${{ github.workspace }}/masil-poc/results/${RUN_ID}"
           rm -rf "${RUN_OUT}"
@@ -124,9 +131,10 @@ jobs:
       - name: Run unit and integration tests (pytest)
         id: pytest
         env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/masil-poc
+          PYTHONPATH: ${{ github.workspace }}/masil-poc:${{ github.workspace }}/masil-poc/tools:${{ github.workspace }}
         run: |
           python -m pytest -q || ( echo "pytest failed"; exit 1 )
+
 
       - name: Run mock supplier demo (simulate external replies)
         if: ${{ always() }}
