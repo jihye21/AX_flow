@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -36,10 +36,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      - name: Install system dependencies for pycairo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            pkg-config \
+            python3-dev \
+            ninja-build
+
       - name: Install pinned dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --only-binary=pycairo pycairo || true
           pip install -r requirements-lock.txt
+          if [ -f "masil-poc/pyproject.toml" ] || [ -f "masil-poc/setup.py" ]; then
+            pip install --no-deps -e ./masil-poc
+          fi
 
       - name: Prepare results dir
         run: |
@@ -54,7 +69,7 @@ jobs:
       - name: Generate initial run metadata (start)
         id: meta_start
         run: |
-          SCENARIO="${{ github.event.inputs.scenario }}"
+          SCENARIO="${{ github.event.inputs.scenario || 'base' }}"
           python3 masil-poc/backend/run_metadata.py --scenario "$SCENARIO" --assumptions masil-poc/inputs/assumptions.csv --out masil-poc/results
           RUN_ID=$(python3 -c "import json,os; print(json.load(open(os.path.join('masil-poc','results','run_metadata.json'))).get('run_id'))")
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "None" ]; then
@@ -67,7 +82,7 @@ jobs:
       - name: Run simulator and generators (into run-specific folder)
         id: run_sim
         run: |
-          SCENARIO="${{ github.event.inputs.scenario }}"
+          SCENARIO="${{ github.event.inputs.scenario || 'base' }}"
           RUN_ID="${{ steps.meta_start.outputs.run_id }}"
           RUN_OUT="${{ github.workspace }}/masil-poc/results/${RUN_ID}"
           rm -rf "${RUN_OUT}"
@@ -115,8 +130,10 @@ jobs:
 
       - name: Run unit and integration tests (pytest)
         id: pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}/masil-poc:${{ github.workspace }}/masil-poc/tools:${{ github.workspace }}
         run: |
-          pytest -q || ( echo "pytest failed"; exit 1 )
+          python -m pytest --import-mode=importlib -q || ( echo "pytest failed"; exit 1 )
 
       - name: Run mock supplier demo (simulate external replies)
         if: ${{ always() }}
