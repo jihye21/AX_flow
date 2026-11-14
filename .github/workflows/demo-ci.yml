@@ -1,4 +1,4 @@
-name: PoC Demo CI (masil-poc) - enhanced
+name: PoC Demo CI (masil-poc, Linux) - enhanced
 
 on:
   workflow_dispatch:
@@ -7,54 +7,26 @@ on:
         description: 'Scenario to run (base|conservative|optimistic)'
         required: false
         default: 'base'
-      run_mock:
-        description: 'Run mock supplier demo (true|false)'
-        required: false
-        default: 'true'
   push:
     branches:
       - main
 
 env:
   PYTHON_VERSION: "3.10"
-  RUNS_DIR: ${{ github.workspace }}/masil-poc/results
-  FEATURE_REAL_EXECUTION: "false"  # CI에서는 기본적으로 실제 실행 비활성화
 
 jobs:
   run-poc:
-    name: Run PoC pipeline
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
+    env:
+      RUNS_DIR: ${{ github.workspace }}/masil-poc/results
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install system dependencies for C extensions (apt)
-        run: |
-          # Ubuntu runner: pycairo / cairo / build deps
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            pkg-config \
-            libcairo2-dev \
-            libgirepository1.0-dev \
-            build-essential \
-            cmake \
-            python3-dev \
-            libffi-dev \
-            libssl-dev \
-            libxml2-dev \
-            libxslt1-dev
-          # Clean apt lists to reduce runner disk usage
-          sudo rm -rf /var/lib/apt/lists/*
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -66,23 +38,15 @@ jobs:
 
       - name: Install pinned dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install pip-tools || true
-          if [ -f requirements-lock.txt ]; then
-            pip install -r requirements-lock.txt
-          elif [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            echo "No requirements file found, continuing..."
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          if [ -f "masil-poc/pyproject.toml" ] || [ -f "masil-poc/setup.py" ]; then
+            pip install --no-deps -e ./masil-poc
           fi
-
-      - name: Set PYTHONPATH for tests
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
 
       - name: Prepare results dir
         run: |
-          mkdir -p "${{ env.RUNS_DIR }}"
+          mkdir -p "${{ github.workspace }}/masil-poc/results"
 
       - name: Validate input files (generate validation_report.json)
         id: validate_inputs
@@ -95,15 +59,15 @@ jobs:
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
           python3 masil-poc/backend/run_metadata.py --scenario "$SCENARIO" --assumptions masil-poc/inputs/assumptions.csv --out masil-poc/results
-          RUN_ID=$(python3 -c "import json,os; print(json.load(open('masil-poc/results/run_metadata.json')).get('run_id'))")
+          RUN_ID=$(python3 -c "import json,os; print(json.load(open(os.path.join('masil-poc','results','run_metadata.json'))).get('run_id'))")
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "None" ]; then
             echo "Error: run_id not generated" >&2
             exit 1
           fi
+          echo "DEBUG_RUN_ID=${RUN_ID}" >&2
           echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
-          echo "run_out=${{ github.workspace }}/masil-poc/results/${RUN_ID}" >> $GITHUB_OUTPUT
 
-      - name: Run simulator and generators
+      - name: Run simulator and generators (into run-specific folder)
         id: run_sim
         run: |
           SCENARIO="${{ github.event.inputs.scenario }}"
@@ -135,7 +99,7 @@ jobs:
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
           python3 masil-poc/tools/verify_manifest.py "${RUN_OUT}"
 
-      - name: Run validation/asserts (domain checks)
+      - name: Run validation/asserts (robust)
         id: asserts
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
@@ -153,22 +117,29 @@ jobs:
           echo "Domain asserts passed."
 
       - name: Run unit and integration tests (pytest)
+        id: pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/masil-poc
         run: |
-          pytest -q || ( echo "pytest failed"; exit 1 )
+          python -m pytest -q || ( echo "pytest failed"; exit 1 )
 
       - name: Run mock supplier demo (simulate external replies)
-        if: ${{ github.event.inputs.run_mock == 'true' }}
+        if: ${{ always() }}
         id: mock_supplier_demo
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
+          # default: use mock supplier to simulate responses for PO items
           python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0001 --amount 524160000 --scenario random || true
           python3 masil-poc/tools/mock_supplier.py --run-out "$RUN_OUT" --po-id SPO-0003 --amount 436800000 --scenario partial || true
+          # after mock responses, optionally trigger action_handler to process events
           python3 masil-poc/backend/action_handler.py --process-events --run-out "$RUN_OUT" || true
 
       - name: Re-run projection if events changed
         if: ${{ always() }}
+        id: rerun_after_events
         run: |
           RUN_OUT="${{ steps.run_sim.outputs.run_out }}"
+          # if action_handler created po_status.json or similar, re-run simulator
           if [ -f "${RUN_OUT}/po_status.json" ]; then
             python3 masil-poc/backend/cash_simulator.py --out "${RUN_OUT}" --data masil-poc/original
             python3 masil-poc/tools/generate_manifest.py "${RUN_OUT}"
