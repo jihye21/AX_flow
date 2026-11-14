@@ -1,0 +1,63 @@
+<!-- frontend/index.html -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Campaign Simulator</title></head>
+<body>
+<h3>Upload campaign CSV</h3>
+<form id="upform">
+  <input type="file" id="demand" name="demand_file" accept=".csv" />
+  <input type="text" id="campaign_name" placeholder="campaign name" />
+  <button type="button" onclick="upload()">Upload</button>
+</form>
+<div id="uploadResult"></div>
+<hr/>
+<h3>Start run</h3>
+<div>
+  Demand filename (from upload): <input id="demand_file_input" />
+  Scenario:
+  <select id="scenario"><option>base</option><option>conservative</option><option>optimistic</option></select>
+  <button onclick="startRun()">Start</button>
+</div>
+<div id="runStatus"></div>
+<script>
+async function upload(){
+  const f = document.getElementById('demand').files[0];
+  if(!f){ alert('select file'); return; }
+  const fd = new FormData();
+  fd.append('demand_file', f);
+  fd.append('campaign_name', document.getElementById('campaign_name').value || '');
+  const res = await fetch('/api/campaigns', {method:'POST', body:fd});
+  const j = await res.json();
+  document.getElementById('uploadResult').innerText = JSON.stringify(j);
+  document.getElementById('demand_file_input').value = j.file;
+}
+async function startRun(){
+  const demand_file = document.getElementById('demand_file_input').value;
+  const scenario = document.getElementById('scenario').value;
+  const res = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({demand_file, scenario})});
+  const j = await res.json();
+  document.getElementById('runStatus').innerText = "Run queued: "+JSON.stringify(j);
+  const runId = j.run_id;
+  // poll
+  pollRun(runId);
+}
+async function pollRun(runId){
+  const el = document.getElementById('runStatus');
+  let interval = setInterval(async ()=>{
+    const res = await fetch('/api/runs/'+runId);
+    const j = await res.json();
+    el.innerText = JSON.stringify(j);
+    if(j.status && (j.status === 'COMPLETED' || j.status === 'FAILED')){
+      clearInterval(interval);
+      if(j.status==='COMPLETED' && j.summary){
+        el.innerText += "\\nSummary: "+JSON.stringify(j.summary);
+        // provide download link for full_cash_projection.csv
+        const link = '/artifacts/'+runId+'/full_cash_projection.csv';
+        el.innerText += "\\nDownload: "+link;
+      }
+    }
+  },2000);
+}
+</script>
+</body>
+</html>
