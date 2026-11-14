@@ -1,27 +1,54 @@
-<!-- frontend/index.html -->
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Campaign Simulator</title></head>
+<head>
+<meta charset="utf-8">
+<title>Campaign Simulator</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:20px}
+pre{background:#f4f4f4;padding:10px}
+button{margin:4px}
+.card{border:1px solid #ddd;padding:10px;margin:8px 0}
+</style>
+</head>
 <body>
-<h3>Upload campaign CSV</h3>
-<form id="upform">
-  <input type="file" id="demand" name="demand_file" accept=".csv" />
-  <input type="text" id="campaign_name" placeholder="campaign name" />
-  <button type="button" onclick="upload()">Upload</button>
-</form>
-<div id="uploadResult"></div>
-<hr/>
-<h3>Start run</h3>
-<div>
-  Demand filename (from upload): <input id="demand_file_input" />
+<h2>Campaign Simulator (운영 모드)</h2>
+
+<div class="card">
+  <h4>1) Upload campaign CSV</h4>
+  <input type="file" id="demandfile" accept=".csv" />
+  <input type="text" id="campaign_name" placeholder="campaign name (optional)" />
+  <button onclick="upload()">Upload</button>
+  <div id="uploadResult"></div>
+</div>
+
+<div class="card">
+  <h4>2) Start run</h4>
+  Demand filename (from upload): <input id="demand_file_input" style="width:320px" />
   Scenario:
-  <select id="scenario"><option>base</option><option>conservative</option><option>optimistic</option></select>
+  <select id="scenario">
+    <option value="base">base</option>
+    <option value="conservative">conservative</option>
+    <option value="optimistic">optimistic</option>
+    <option value="po_shift">po_shift (PO 연기 1개월)</option>
+    <option value="po_split">po_split (PO 분할 50:50)</option>
+  </select>
   <button onclick="startRun()">Start</button>
 </div>
-<div id="runStatus"></div>
+
+<div class="card">
+  <h4>3) Run Status & Actions</h4>
+  <pre id="runStatus">No run yet</pre>
+  <div id="actionButtons"></div>
+</div>
+
+<div class="card">
+  <h4>4) AI Recommendations</h4>
+  <pre id="aiRec">No recommendations yet</pre>
+</div>
+
 <script>
 async function upload(){
-  const f = document.getElementById('demand').files[0];
+  const f = document.getElementById('demandfile').files[0];
   if(!f){ alert('select file'); return; }
   const fd = new FormData();
   fd.append('demand_file', f);
@@ -31,32 +58,76 @@ async function upload(){
   document.getElementById('uploadResult').innerText = JSON.stringify(j);
   document.getElementById('demand_file_input').value = j.file;
 }
+
 async function startRun(){
   const demand_file = document.getElementById('demand_file_input').value;
   const scenario = document.getElementById('scenario').value;
-  const res = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({demand_file, scenario})});
+  const body = {demand_file, scenario};
+  const res = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const j = await res.json();
-  document.getElementById('runStatus').innerText = "Run queued: "+JSON.stringify(j);
-  const runId = j.run_id;
-  // poll
-  pollRun(runId);
+  document.getElementById('runStatus').innerText = "Run queued: " + JSON.stringify(j,null,2);
+  if(j.run_id) pollRun(j.run_id);
 }
+
+let pollHandles = {};
 async function pollRun(runId){
   const el = document.getElementById('runStatus');
-  let interval = setInterval(async ()=>{
+  if(pollHandles[runId]) return;
+  pollHandles[runId] = setInterval(async ()=>{
     const res = await fetch('/api/runs/'+runId);
     const j = await res.json();
-    el.innerText = JSON.stringify(j);
-    if(j.status && (j.status === 'COMPLETED' || j.status === 'FAILED')){
-      clearInterval(interval);
-      if(j.status==='COMPLETED' && j.summary){
-        el.innerText += "\\nSummary: "+JSON.stringify(j.summary);
-        // provide download link for full_cash_projection.csv
-        const link = '/artifacts/'+runId+'/full_cash_projection.csv';
-        el.innerText += "\\nDownload: "+link;
+    el.innerText = JSON.stringify(j,null,2);
+    // show recommendations if available
+    if(j.recommendations){
+      document.getElementById('aiRec').innerText = JSON.stringify(j.recommendations,null,2);
+    } else {
+      // try loading recommendations file
+      const recRes = await fetch('/artifacts/'+runId+'/recommendations.json').catch(()=>null);
+      if(recRes && recRes.ok){
+        const text = await recRes.text();
+        document.getElementById('aiRec').innerText = text;
       }
     }
-  },2000);
+    // render approve/reject buttons when needed
+    const actions = document.getElementById('actionButtons');
+    actions.innerHTML = '';
+    if(j.status && (j.status === 'COMPLETED' || j.status === 'NEEDS_APPROVAL' || j.status === 'AWAITING_ERP')){
+      const approveBtn = document.createElement('button');
+      approveBtn.textContent = 'Approve';
+      approveBtn.onclick = ()=> sendDecision(runId, 'APPROVED');
+      actions.appendChild(approveBtn);
+      const rejectBtn = document.createElement('button');
+      rejectBtn.textContent = 'Reject';
+      rejectBtn.onclick = ()=> sendDecision(runId, 'REJECTED');
+      actions.appendChild(rejectBtn);
+    }
+    if(j.status && (j.status === 'COMPLETED' || j.status === 'APPROVED' || j.status === 'REPLAN_IN_PROGRESS')){
+      // provide download links
+      const link = '/artifacts/'+runId+'/full_cash_projection.csv';
+      const a = document.createElement('a');
+      a.href = link;
+      a.textContent = 'Download projection';
+      a.style.display = 'block';
+      actions.appendChild(a);
+    }
+    if(j.status && (j.status === 'COMPLETED' || j.status === 'FAILED' || j.status === 'APPROVED')){
+      // stop polling when terminal (but we may want to continue to show approval changes)
+      // clearInterval(pollHandles[runId]);
+      // delete pollHandles[runId];
+    }
+  }, 2000);
+}
+
+async function sendDecision(runId, decision){
+  const comment = prompt("Decision comment (optional):");
+  // demo token header: in real system use JWT
+  const res = await fetch('/api/runs/'+runId+'/decision', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-User':'demo_user','X-Auth-Token':'admin'},
+    body: JSON.stringify({decision, comment})
+  });
+  const j = await res.json();
+  alert("Decision result: " + JSON.stringify(j));
 }
 </script>
 </body>
