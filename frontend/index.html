@@ -1,133 +1,398 @@
 <!doctype html>
-<html>
+<html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>Campaign Simulator</title>
+<title>Campaign Simulator (운영 모드)</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:20px}
-pre{background:#f4f4f4;padding:10px}
-button{margin:4px}
-.card{border:1px solid #ddd;padding:10px;margin:8px 0}
+body{font-family:Arial,Helvetica,sans-serif;margin:20px;color:#1f2937;background:#f9fafb}
+.header-bar{display:flex;justify-content:space-between;align-items:center;background:#1e293b;color:#fff;padding:12px 20px;border-radius:8px;margin-bottom:16px}
+.role-box select{padding:6px 10px;border-radius:4px;font-weight:bold;background:#f8fafc;color:#0f172a}
+pre{background:#f3f4f6;padding:10px;overflow-x:auto;border-radius:4px;font-size:13px}
+button{margin:4px;padding:7px 14px;cursor:pointer;border:none;border-radius:4px;font-weight:bold}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-approve{background:#16a34a;color:#fff}
+.btn-reject{background:#dc2626;color:#fff}
+.btn-disabled{background:#9ca3af;color:#fff;cursor:not-allowed}
+.card{background:#fff;border:1px solid #e5e7eb;padding:16px;margin:12px 0;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,0.05)}
+.badge{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold;color:#fff}
+.badge-NEEDS_APPROVAL{background:#d97706}
+.badge-PARTIALLY_APPROVED{background:#2563eb}
+.badge-APPROVED{background:#16a34a}
+.badge-REJECTED_REPLANNING{background:#dc2626}
+.badge-QUEUED{background:#6b7280}
+.approver-table{width:100%;border-collapse:collapse;margin-top:10px}
+.approver-table th, .approver-table td{border:1px solid #e5e7eb;padding:10px;text-align:left;font-size:14px}
+.approver-table th{background:#f8fafc}
+.notif-item{background:#eff6ff;border-left:4px solid #3b82f6;padding:8px 12px;margin:6px 0;font-size:13px;border-radius:0 4px 4px 0}
+.replan-alert{background:#fff5f5;border:1px solid #feb2b2;padding:12px;margin-top:10px;border-radius:6px}
+.badge-BLOCKED_BY_DOMAIN_RULE{background:#991b1b}
+.domain-block-banner{background:#fef2f2;border:2px solid #dc2626;color:#7f1d1d;padding:12px;border-radius:6px;margin:10px 0;font-size:14px}
+.dept-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+.dept-card{background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:12px}
+.dept-card h5{margin:0 0 8px 0;font-size:15px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
+.action-item{background:#fff;border:1px solid #e2e8f0;padding:8px;border-radius:4px;margin-bottom:6px;font-size:13px}
+.audit-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+.audit-table th, .audit-table td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+.audit-table th{background:#f1f5f9}
 </style>
 </head>
 <body>
-<h2>Campaign Simulator (운영 모드)</h2>
+
+<div class="header-bar">
+  <div>
+    <h2 style="margin:0;font-size:20px;">📊 AX Campaign & Cash Flow Simulator</h2>
+    <span style="font-size:12px;color:#cbd5e1;">다중 결재 워크플로 및 예외 대응 운영 콘솔</span>
+  </div>
+  <div class="role-box">
+    <label for="currentRole" style="font-size:13px;margin-right:6px;">👤 현재 로그인 역할:</label>
+    <select id="currentRole" onchange="onRoleChange()">
+      <option value="purchase_lead">구매팀장 (purchase_lead)</option>
+      <option value="finance_lead">재무팀장 (finance_lead)</option>
+      <option value="marketing_staff">마케팅담당 (결재권한 없음)</option>
+    </select>
+  </div>
+</div>
 
 <div class="card">
-  <h4>1) Upload campaign CSV</h4>
+  <h4 style="margin-top:0;">1) Upload campaign CSV</h4>
   <input type="file" id="demandfile" accept=".csv" />
-  <input type="text" id="campaign_name" placeholder="campaign name (optional)" />
-  <button onclick="upload()">Upload</button>
-  <div id="uploadResult"></div>
+  <input type="text" id="campaign_name" placeholder="campaign name (optional)" style="padding:5px;" />
+  <button class="btn-primary" onclick="upload()">Upload</button>
+  <div id="uploadResult" style="margin-top:6px;font-size:13px;color:#059669;"></div>
 </div>
 
 <div class="card">
-  <h4>2) Start run</h4>
-  Demand filename (from upload): <input id="demand_file_input" style="width:320px" />
+  <h4 style="margin-top:0;">2) Start Simulation Run</h4>
+  Demand filename: <input id="demand_file_input" style="width:280px;padding:5px;" />
   Scenario:
-  <select id="scenario">
-    <option value="base">base</option>
-    <option value="conservative">conservative</option>
-    <option value="optimistic">optimistic</option>
-    <option value="po_shift">po_shift (PO 연기 1개월)</option>
+  <select id="scenario" style="padding:5px;">
+    <option value="base">base (기본 시나리오)</option>
     <option value="po_split">po_split (PO 분할 50:50)</option>
+    <option value="po_shift">po_shift (PO 연기 1개월)</option>
+    <option value="conservative">conservative (보수적)</option>
+    <option value="optimistic">optimistic (낙관적)</option>
   </select>
-  <button onclick="startRun()">Start</button>
+  <button class="btn-primary" onclick="startRun()">Start Run</button>
 </div>
 
 <div class="card">
-  <h4>3) Run Status & Actions</h4>
-  <pre id="runStatus">No run yet</pre>
-  <div id="actionButtons"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h4 style="margin:0;">3) AI Recommendations (부서별 액션 권고)</h4>
+    <span id="aiModelBadge" style="font-size:12px;color:#64748b;"></span>
+  </div>
+  <div id="aiRecContainer" class="dept-grid">
+    <div style="color:#6b7280;font-size:13px;">시뮬레이션 실행 후 부서별 권고안이 표시됩니다.</div>
+  </div>
+</div>
+
+<div class="card" id="workflowCard" style="display:none;border:2px solid #cbd5e1;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h3 style="margin:0;">🔐 다중 결재 승인 워크플로 (Multi-Approval Workflow)</h3>
+    <span id="statusBadge" class="badge">STATUS</span>
+  </div>
+  <p id="approvalRuleText" style="font-size:13px;color:#4b5563;margin:6px 0;"></p>
+  <div id="domainBlockBanner" class="domain-block-banner" style="display:none;">
+    <strong>⛔ 도메인 제약 위반으로 실행 차단됨 (BLOCKED_BY_DOMAIN_RULE)</strong>
+    <p id="domainBlockReason" style="margin:6px 0 0 0;"></p>
+  </div>
+  <table class="approver-table">
+    <thead>
+      <tr>
+        <th>결재 단계</th>
+        <th>담당 역할</th>
+        <th>결재 상태</th>
+        <th>처리자 / 시각</th>
+        <th>코멘트</th>
+        <th>결재 액션 (현재 역할 기준)</th>
+      </tr>
+    </thead>
+    <tbody id="approverTableBody"></tbody>
+  </table>
+
+  <div id="erpSyncBox" style="display:none;margin-top:12px;padding:10px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;font-size:13px;">
+    <strong>🚀 ERP 연동 상태:</strong> <span id="erpSyncText"></span>
+  </div>
+
+  <div style="margin-top:16px;">
+    <h4 style="margin:0 0 6px 0;font-size:14px;">🔔 실시간 Slack / Email 알림 발송 내역</h4>
+    <div id="notificationList"></div>
+  </div>
+</div>
+
+<div class="card" id="decisionCard" style="display:none;">
+  <h4 style="margin-top:0;">4) Decision Audit Log & Replan Result</h4>
+  <div><strong>📋 결재 감사 이력 (Audit Trail):</strong></div>
+  <table class="audit-table">
+    <thead>
+      <tr>
+        <th>결재 시각 (UTC)</th>
+        <th>담당 역할</th>
+        <th>처리자</th>
+        <th>결재 결과</th>
+        <th>코멘트</th>
+      </tr>
+    </thead>
+    <tbody id="auditTableBody"></tbody>
+  </table>
+  
+  <div id="replanSection" class="replan-alert" style="display:none;">
+    <strong>🔄 거절(Reject) 대응: 캠페인 30% 축소 플랜 B 자동 재계산 결과</strong>
+    <div id="replanSummaryCards" style="margin-top:8px;font-size:14px;"></div>
+  </div>
 </div>
 
 <div class="card">
-  <h4>4) AI Recommendations</h4>
-  <pre id="aiRec">No recommendations yet</pre>
+  <h4 style="margin-top:0;">5) Artifacts & Raw Data</h4>
+  <div id="downloadArea" style="margin-bottom:10px;"></div>
+  <details>
+    <summary style="cursor:pointer;font-size:13px;color:#4b5563;font-weight:bold;">🔍 원본 JSON 데이터 펼쳐보기 (개발/감사 검증용)</summary>
+    <pre id="runStatus" style="margin-top:8px;">No run yet</pre>
+  </details>
 </div>
 
 <script>
+let currentRunId = null;
+let lastRunData = null;
+
+function onRoleChange(){
+  if(lastRunData) renderWorkflow(lastRunData);
+}
+
 async function upload(){
-  const f = document.getElementById('demandfile').files[0];
-  if(!f){ alert('select file'); return; }
+  const fileInput = document.getElementById('demandfile');
+  if(!fileInput.files || fileInput.files.length === 0){
+    alert('CSV 파일을 먼저 선택하세요.');
+    return;
+  }
+  const f = fileInput.files[0];
   const fd = new FormData();
   fd.append('demand_file', f);
   fd.append('campaign_name', document.getElementById('campaign_name').value || '');
   const res = await fetch('/api/campaigns', {method:'POST', body:fd});
   const j = await res.json();
-  document.getElementById('uploadResult').innerText = JSON.stringify(j);
+  document.getElementById('uploadResult').innerText = "✅ 업로드 완료: " + j.file;
   document.getElementById('demand_file_input').value = j.file;
 }
 
 async function startRun(){
   const demand_file = document.getElementById('demand_file_input').value;
   const scenario = document.getElementById('scenario').value;
-  const body = {demand_file, scenario};
-  const res = await fetch('/api/runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!demand_file){ alert('업로드된 파일명이 필요합니다.'); return; }
+  
+  document.getElementById('decisionCard').style.display = 'none';
+  document.getElementById('replanSection').style.display = 'none';
+  document.getElementById('erpSyncBox').style.display = 'none';
+  
+  const res = await fetch('/api/runs', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({demand_file, scenario})
+  });
   const j = await res.json();
+  currentRunId = j.run_id;
   document.getElementById('runStatus').innerText = "Run queued: " + JSON.stringify(j,null,2);
   if(j.run_id) pollRun(j.run_id);
 }
 
-let pollHandles = {};
-async function pollRun(runId){
-  const el = document.getElementById('runStatus');
-  if(pollHandles[runId]) return;
-  pollHandles[runId] = setInterval(async ()=>{
-    const res = await fetch('/api/runs/'+runId);
-    const j = await res.json();
-    el.innerText = JSON.stringify(j,null,2);
-    // show recommendations if available
-    if(j.recommendations){
-      document.getElementById('aiRec').innerText = JSON.stringify(j.recommendations,null,2);
+function renderWorkflow(j){
+  if(!j.approval_state) return;
+  document.getElementById('workflowCard').style.display = 'block';
+  
+  const badge = document.getElementById('statusBadge');
+  badge.innerText = j.status;
+  badge.className = 'badge badge-' + j.status;
+  
+  document.getElementById('approvalRuleText').innerText = "📌 적용 결재 규칙: " + j.approval_state.rule;
+
+  const currentRole = document.getElementById('currentRole').value;
+  const tbody = document.getElementById('approverTableBody');
+  tbody.innerHTML = '';
+
+  const rolesInfo = [
+    { key: 'purchase_lead', step: '1차 결재', label: '구매팀장 (purchase_lead)' },
+    { key: 'finance_lead', step: '2차 결재', label: '재무팀장 (finance_lead)' }
+  ];
+
+  rolesInfo.forEach(r => {
+    const info = j.approval_state.approvals[r.key] || { status: 'PENDING' };
+    const tr = document.createElement('tr');
+    
+    let statusHtml = info.status;
+    if(info.status === 'APPROVED') statusHtml = '<span style="color:#16a34a;font-weight:bold;">✅ APPROVED</span>';
+    else if(info.status === 'REJECTED') statusHtml = '<span style="color:#dc2626;font-weight:bold;">❌ REJECTED</span>';
+    else statusHtml = '<span style="color:#d97706;font-weight:bold;">⏳ PENDING</span>';
+
+    const actorText = info.actor ? `${info.actor} (${info.at.slice(11,19)})` : '-';
+    
+    const blockBanner = document.getElementById('domainBlockBanner');
+    const domainChk = (j.summary && j.summary.domain_constraint_check) || {};
+    if(j.status === 'BLOCKED_BY_DOMAIN_RULE' || domainChk.status === 'VIOLATED'){
+      blockBanner.style.display = 'block';
+      document.getElementById('domainBlockReason').innerText = 
+        `${domainChk.reason} [차단된 발주: ${(domainChk.blocked_pos || []).join(', ')}]`;
     } else {
-      // try loading recommendations file
-      const recRes = await fetch('/artifacts/'+runId+'/recommendations.json').catch(()=>null);
-      if(recRes && recRes.ok){
-        const text = await recRes.text();
-        document.getElementById('aiRec').innerText = text;
+      blockBanner.style.display = 'none';
+    }
+
+    let actionHtml = '';
+    const isTerminal = (j.status === 'APPROVED' || j.status === 'REJECTED_REPLANNING' || j.status === 'BLOCKED_BY_DOMAIN_RULE');
+    if(!isTerminal && info.status === 'PENDING'){
+      if(currentRole === r.key){
+        actionHtml = `
+          <button class="btn-approve" onclick="sendDecision('${j.id}', '${r.key}', 'APPROVED')">승인 (Approve)</button>
+          <button class="btn-reject" onclick="sendDecision('${j.id}', '${r.key}', 'REJECTED')">반려 (Reject)</button>
+        `;
+      } else {
+        actionHtml = `<button class="btn-disabled" disabled>권한 없음 (${r.label} 전용)</button>`;
       }
+    } else {
+      actionHtml = `<span style="color:#6b7280;font-size:12px;">처리 완료</span>`;
     }
-    // render approve/reject buttons when needed
-    const actions = document.getElementById('actionButtons');
-    actions.innerHTML = '';
-    if(j.status && (j.status === 'COMPLETED' || j.status === 'NEEDS_APPROVAL' || j.status === 'AWAITING_ERP')){
-      const approveBtn = document.createElement('button');
-      approveBtn.textContent = 'Approve';
-      approveBtn.onclick = ()=> sendDecision(runId, 'APPROVED');
-      actions.appendChild(approveBtn);
-      const rejectBtn = document.createElement('button');
-      rejectBtn.textContent = 'Reject';
-      rejectBtn.onclick = ()=> sendDecision(runId, 'REJECTED');
-      actions.appendChild(rejectBtn);
-    }
-    if(j.status && (j.status === 'COMPLETED' || j.status === 'APPROVED' || j.status === 'REPLAN_IN_PROGRESS')){
-      // provide download links
-      const link = '/artifacts/'+runId+'/full_cash_projection.csv';
-      const a = document.createElement('a');
-      a.href = link;
-      a.textContent = 'Download projection';
-      a.style.display = 'block';
-      actions.appendChild(a);
-    }
-    if(j.status && (j.status === 'COMPLETED' || j.status === 'FAILED' || j.status === 'APPROVED')){
-      // stop polling when terminal (but we may want to continue to show approval changes)
-      // clearInterval(pollHandles[runId]);
-      // delete pollHandles[runId];
-    }
-  }, 2000);
+
+    tr.innerHTML = `
+      <td><strong>${r.step}</strong></td>
+      <td>${r.label}</td>
+      <td>${statusHtml}</td>
+      <td>${actorText}</td>
+      <td>${info.comment || '-'}</td>
+      <td>${actionHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if(j.erp_sync){
+    document.getElementById('erpSyncBox').style.display = 'block';
+    document.getElementById('erpSyncText').innerText = `${j.erp_sync.status} | Key: ${j.erp_sync.idempotency_key} | 시각: ${j.erp_sync.synced_at}`;
+  }
+
+  const notifList = document.getElementById('notificationList');
+  notifList.innerHTML = '';
+  (j.notifications || []).forEach(n => {
+    const div = document.createElement('div');
+    div.className = 'notif-item';
+    div.innerHTML = `<strong>[${n.channel}]</strong> 수신: <code>${n.recipient}</code> — ${n.message} <span style="color:#6b7280;font-size:11px;">(${n.sent_at.slice(11,19)})</span>`;
+    notifList.appendChild(div);
+  });
 }
 
-async function sendDecision(runId, decision){
-  const comment = prompt("Decision comment (optional):");
-  // demo token header: in real system use JWT
-  const res = await fetch('/api/runs/'+runId+'/decision', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-User':'demo_user','X-Auth-Token':'admin'},
-    body: JSON.stringify({decision, comment})
+let pollHandles = {};
+function renderAiCards(rec){
+  const container = document.getElementById('aiRecContainer');
+  if(!rec) return;
+  document.getElementById('aiModelBadge').innerText = `Engine: ${rec.model || 'AI Advisor'}`;
+  
+  const depts = [
+    { key: 'purchase', title: '📦 구매팀 (Purchase)', items: rec.purchase || [] },
+    { key: 'sales', title: '💼 영업팀 (Sales)', items: rec.sales || [] },
+    { key: 'marketing', title: '📣 마케팅팀 (Marketing)', items: rec.marketing || [] }
+  ];
+
+  container.innerHTML = depts.map(d => {
+    const itemsHtml = d.items.length > 0 
+      ? d.items.map(item => `
+          <div class="action-item">
+            <div style="font-weight:bold;color:#1d4ed8;margin-bottom:4px;">• ${item.action}</div>
+            <div style="color:#334155;margin-bottom:4px;"><strong>근거:</strong> ${item.rationale || '-'}</div>
+            ${item.expected_recovery ? `<div style="color:#059669;"><strong>기대효과:</strong> ${item.expected_recovery}</div>` : ''}
+            ${item.percent ? `<div style="color:#d97706;"><strong>조정비율:</strong> ${item.percent}% 축소</div>` : ''}
+          </div>
+        `).join('')
+      : `<div style="color:#94a3b8;font-size:13px;">현재 추가 조치 권고 없음</div>`;
+
+    return `
+      <div class="dept-card">
+        <h5>${d.title}</h5>
+        ${itemsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateRunView(runId){
+  const res = await fetch('/api/runs/' + runId);
+  const j = await res.json();
+  lastRunData = j;
+  
+  document.getElementById('runStatus').innerText = JSON.stringify(j, null, 2);
+  renderWorkflow(j);
+
+  // 3) AI Recommendations 카드 렌더링
+  if(j.recommendations){
+    renderAiCards(j.recommendations);
+  }
+
+  // 4) 감사 로그 테이블 렌더링
+  if(j.decision_log && j.decision_log.audit){
+    document.getElementById('decisionCard').style.display = 'block';
+    const tbody = document.getElementById('auditTableBody');
+    tbody.innerHTML = j.decision_log.audit.map(log => {
+      const det = log.detail || {};
+      const isApp = det.decision === 'APPROVED';
+      const badge = isApp 
+        ? '<span style="color:#16a34a;font-weight:bold;">✅ APPROVED</span>' 
+        : '<span style="color:#dc2626;font-weight:bold;">❌ REJECTED</span>';
+      return `
+        <tr>
+          <td>${log.at.replace('T', ' ').slice(0, 19)}</td>
+          <td><strong>${log.role}</strong></td>
+          <td>${log.actor}</td>
+          <td>${badge}</td>
+          <td>${det.comment || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  // 거절 시 플랜 B 결과 요약 렌더링
+  if(j.status && j.status.includes('REJECTED')){
+    document.getElementById('decisionCard').style.display = 'block';
+    document.getElementById('replanSection').style.display = 'block';
+    if(j.replan_summary){
+      document.getElementById('replanSummaryCards').innerHTML = `
+        <div style="background:#fff;padding:10px;border-radius:4px;border:1px solid #fecaca;">
+          ✅ <strong>플랜 B(수요 30% 축소) 재계산 완료</strong><br>
+          • 변경된 현금 부족(Shortfall) 일수: <strong style="color:#16a34a;font-size:16px;">${j.replan_summary.shortfall_count}건</strong><br>
+          • 산출물 무결성 검증: ${j.replan_summary.missing_artifacts.length === 0 ? '통과 (이상 없음)' : '누락 있음'}
+        </div>
+      `;
+    } else {
+      document.getElementById('replanSummaryCards').innerText = "⏳ 수요 30% 축소 시나리오 자동 재계산 중...";
+    }
+  }
+
+  const dlArea = document.getElementById('downloadArea');
+  if(j.status && j.status !== 'QUEUED' && j.status !== 'FAILED'){
+    dlArea.innerHTML = `<a href="/artifacts/${runId}/full_cash_projection.csv" style="color:#2563eb;font-weight:bold;">📥 Download full_cash_projection.csv</a>`;
+  }
+}
+
+async function pollRun(runId){
+  if(pollHandles[runId]) return;
+  await updateRunView(runId);
+  pollHandles[runId] = setInterval(() => updateRunView(runId), 2000);
+}
+
+async function sendDecision(runId, role, decision){
+  const label = role === 'purchase_lead' ? '구매팀장' : '재무팀장';
+  const comment = prompt(`[${label}] ${decision} 결재 의견을 입력하세요 (선택):`);
+  if(comment === null) return;
+  
+  const res = await fetch('/api/runs/' + runId + '/decision', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User': `${role}_user`,
+      'X-Role': role,
+      'X-Auth-Token': 'admin'
+    },
+    body: JSON.stringify({decision, role, comment})
   });
   const j = await res.json();
-  alert("Decision result: " + JSON.stringify(j));
+  if(!res.ok){
+    alert("오류: " + (j.error || "권한이 없습니다."));
+    return;
+  }
+  await updateRunView(runId);
 }
 </script>
 </body>
