@@ -1,0 +1,7 @@
+{
+  "demand_file": "/workspaces/AX_flow/campaign_demand_base.csv",
+  "demand_hash": "0d96cb0cb0c63b77d4f91ae67da352c781467ea2eceadf3c8cc34c68b5f653ab",
+  "scenario": "base",
+  "started_at": "2026-11-14T04:44:35.566830Z",
+  "cwd": "/workspaces/AX_flow"
+}
